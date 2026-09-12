@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.cyrene.dev/yield/product/v1/training-attempt.schema.json",
+  "title": "Yield TrainingAttempt v1",
+  "type": "object",
+  "required": [
+    "id",
+    "runId",
+    "ordinal",
+    "state",
+    "createdAt",
+    "updatedAt",
+    "resourceVersion"
+  ],
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "runId": {"type": "string", "format": "uuid"},
+    "ordinal": {"type": "integer", "minimum": 1},
+    "state": {"enum": ["QUEUED", "RUNNING", "CANCELLING", "COMPLETED", "FAILED", "CANCELLED", "LOST"]},
+    "failure": {"$ref": "./training-run.schema.json#/$defs/failure"},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "updatedAt": {"type": "string", "format": "date-time"},
+    "resourceVersion": {"type": "integer", "minimum": 1}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │  📄 cyrene-trainer-runtime                                          │
+# │  Role: Stable entrypoint for the locked Yield CUDA environment.     │
+# │                                                                     │
+# │  脚本职责：部署并检查锁定的 Yield CUDA 训练环境。                         │
+# └─────────────────────────────────────────────────────────────────────┘
+
+set -euo pipefail
+
+SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "${SCRIPT_DIRECTORY}/bootstrap.py" "$@"

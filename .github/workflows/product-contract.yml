@@ -1,0 +1,24 @@
+name: Product contract and SPI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main, 'feat/**', 'fix/**']
+
+permissions:
+  contents: read
+
+jobs:
+  product-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install uv==0.12.3
+      - run: python -m json.tool service.json >/dev/null
+      - run: uvx ruff==0.16.5 check contracts/product/v1/tests
+      - run: uvx ruff==0.16.5 format --check contracts/product/v1/tests
+      - run: uvx --from pytest==9.1.1 --with jsonschema==4.26.0 pytest -q contracts/product/v1/tests
+      - run: uvx --from openapi-spec-validator==0.9.0 openapi-spec-validator contracts/product/v1/openapi.yaml

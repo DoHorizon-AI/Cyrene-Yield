@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "com.cyrene.service.yield",
+  "name": "Yield",
+  "service": "yield",
+  "visibility": "public",
+  "distribution": "advanced-service-plugin",
+  "status": "active-product",
+  "core": {
+    "protocol_version": 1,
+    "minimum_core_version": "0.1.0",
+    "extension_points": [
+      "model.analyzer.v1",
+      "compatibility.evaluator.v1",
+      "tool.dataset.validator.v1",
+      "training.llama-factory.v1"
+    ],
+    "planned_extension_points": [
+      "model.registry.v1"
+    ]
+  },
+  "source_roots": [
+    "training/core",
+    "sdk/python/cyrene_yield_contracts"
+  ],
+  "migration": {
+    "productCore": "training/core",
+    "publicContracts": "sdk/python/cyrene_yield_contracts",
+    "llamaFactoryCapability": "training.llama-factory.v1",
+    "implementationOwner": "Cyrene-Plugins-Official",
+    "hashVerified": true
+  }
+}

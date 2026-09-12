@@ -1,0 +1,22 @@
+{
+  "platformRevision": "c59be6f2bd82489fbe933dadff84fc589e00afd9",
+  "grpcioToolsVersion": "1.83.0",
+  "descriptorSha256": "fccbe281e083f4fb7c32e03928a33ee2357ccb14957c6a8ec6996604d37e5563",
+  "sourceSha256": {
+    "contracts/proto/cyrene/core/v1/common.proto": "6842b2ed04a90d078a9b1fcebbe12b05e2bba6e4f15e5a215eeeeb352cac68b1",
+    "contracts/proto/cyrene/core/v1/cyrene_core.proto": "7ae20868a1df0a5dd7769e57679eabdaae1eb6b54f48789aa566bebb17fe50dd",
+    "contracts/proto/cyrene/core/v1/kernel_authority.proto": "608a1a6b5861ef98552bb6165cad5e7c7676f6cd5fab4ebfac4e4fb0783d1089",
+    "contracts/proto/cyrene/core/v1/kernel_runtime.proto": "274f9d8671b32a061ce87ee33bddcf5b3d7e82a8da14b5c871e842374b17e2ff",
+    "contracts/proto/cyrene/core/v1/node_control.proto": "9a2ac6101c4dedb55f8caa08b5cfd807391f8ea988689c4744a05312a283439a",
+    "contracts/proto/cyrene/core/v1/plugin_lifecycle.proto": "0382faee360d43dbb8c5075779a96e28ed595cd5f577ef2596c372b0c007513a",
+    "contracts/proto/cyrene/core/v1/resource.proto": "8edf63ee8ba5bc77a736841df4f5753a0f7dea3fd49be0961b4eeed94fa4bd85",
+    "contracts/proto/cyrene/core/v1/service_supervision.proto": "d8edc70a2b72d5adb84ea912f46a59213ad86f182709caafbf888b65aa39f032",
+    "contracts/proto/cyrene/core/v2/kernel_authority.proto": "521c93247ae6ced4bf2538e4aa5d7431f72864bb85350705d962351ae2280294",
+    "contracts/proto/cyrene/hardware/v1/hardware_adapter.proto": "277d2801675ea09cf7d152273fc9d3f187d3b3a1e586198a6c5ca14028f3f280",
+    "contracts/proto/cyrene/provider/v1/kernel_provider.proto": "a0404ba9e5ef1f07e0dc7b83c61b8817d7d39169dd51ce3fc814f72f58062b71",
+    "contracts/proto/cyrene/sandbox/v1/sandbox_adapter.proto": "9b0126f1708e5a6af46f4773aa034b4f04e697415e37c77a09913720153f99ea",
+    "contracts/proto/cyrene/semantic/v1/kernel_contract.proto": "ea7a3270ddb0021dbc141cfaefda23873b313e6928ad9f9887812acbc45668d3",
+    "contracts/proto/cyrene/workspace/v1/workspace_fabric.proto": "bc9343ce84b91ca7caeb8a2aed90c8c3115d6829292fa179de9914a0e1ed8ecf",
+    "contracts/proto/google/rpc/status.proto": "1d3ee36a3f91dc2f86135ffb7869a20f208b277e7f5087624a27bf8a6640d4f7"
+  }
+}

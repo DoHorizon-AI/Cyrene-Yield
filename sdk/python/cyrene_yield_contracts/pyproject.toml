@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cyrene-yield-contracts"
+version = "0.1.0"
+description = "Public model composition contracts owned by Cyrene Yield"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+  "cyrene-artifacts @ git+https://github.com/DoHorizon-AI/Cyrene-Platform.git@c59be6f2bd82489fbe933dadff84fc589e00afd9#subdirectory=sdk/python/cyrene_artifacts",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cyrene_yield_contracts"]

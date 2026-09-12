@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.cyrene.dev/yield/product/v1/training-run.schema.json",
+  "title": "Yield TrainingRun v1",
+  "type": "object",
+  "required": [
+    "id",
+    "state",
+    "spec",
+    "engineBindingId",
+    "engineCapabilityType",
+    "attemptCount",
+    "outputArtifacts",
+    "createdAt",
+    "updatedAt",
+    "resourceVersion"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "CANCELLING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "AWAITING_RETRY"
+      ]
+    },
+    "spec": {
+      "$ref": "#/$defs/trainingSpec"
+    },
+    "engineBindingId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "engineCapabilityType": {
+      "const": "cyrene.yield.training-runtime.v1"
+    },
+    "activeAttemptId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "attemptCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "outputArtifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/producedArtifact"
+      }
+    },
+    "failure": {
+      "$ref": "#/$defs/failure"
+    },
+    "cancellationRequestedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resourceVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "resourceRef": {
+      "$ref": "#/$defs/resourceRef"
+    },
+    "draftRef": {
+      "$ref": "#/$defs/resourceRef"
+    },
+    "result": {
+      "$ref": "./training-result.schema.json"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": [
+              "FAILED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "failure"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": [
+              "CANCELLING",
+              "CANCELLED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "cancellationRequestedAt"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "trainingSpec": {
+      "type": "object",
+      "required": [
+        "modelArtifact",
+        "datasetVersion",
+        "method",
+        "parameters"
+      ],
+      "properties": {
+        "modelArtifact": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "datasetVersion": {
+          "$ref": "#/$defs/datasetVersionRef"
+        },
+        "method": {
+          "enum": [
+            "PRETRAIN",
+            "SFT",
+            "DPO"
+          ]
+        },
+        "finetuningType": {
+          "enum": [
+            "FULL",
+            "LORA",
+            "QLORA"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "epochs": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "perDeviceBatchSize": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "gradientAccumulationSteps": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "learningRate": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "maxSequenceLength": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "extensions": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$"
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "datasetVersionRef": {
+      "type": "object",
+      "required": [
+        "uri",
+        "id",
+        "resourceVersion",
+        "artifact"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "resourceVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifactRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifactRef": {
+      "$comment": "SPDX-License-Identifier: Apache-2.0",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://cy-llm.dev/schemas/manifests/artifact_ref.schema.json",
+      "title": "ArtifactRef",
+      "description": "Provider-neutral immutable reference to an artifact. Provider locations are resolved separately.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "digest",
+        "size_bytes",
+        "kind"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "pattern": "^artifact://sha256/[0-9a-f]{64}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Opaque producer-owned category. Platform does not define its vocabulary."
+        },
+        "manifest_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Digest of a canonical multi-file directory index when the artifact is a directory; for a portable V2 directory this identifies the manifest bytes described by portable_directory_manifest.schema.json."
+        }
+      }
+    },
+    "producedArtifact": {
+      "type": "object",
+      "required": [
+        "kind",
+        "artifact",
+        "derivedFromDigests"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "MODEL_CHECKPOINT",
+            "MODEL_ADAPTER",
+            "METRICS",
+            "TRAINING_MANIFEST"
+          ]
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "derivedFromDigests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "resourceRef": {
+      "additionalProperties": false,
+      "description": "Opaque, versioned identity owned by the source Product.",
+      "properties": {
+        "uri": {
+          "pattern": "^(https?://|cyrene://)[^\\s]+$",
+          "title": "Uri",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "resourceVersion": {
+          "minimum": 1,
+          "title": "Resourceversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "uri",
+        "id",
+        "resourceVersion"
+      ],
+      "title": "ResourceRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyrene-yield"
+version = "0.1.0"
+description = "Cyrene Yield: Unified Model Training and Fine-Tuning Service"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0.0",
+    "PyYAML>=6.0",
+    "psutil>=5.9.0",
+    "cyrene-artifacts @ git+https://github.com/DoHorizon-AI/Cyrene-Platform.git@c59be6f2bd82489fbe933dadff84fc589e00afd9#subdirectory=sdk/python/cyrene_artifacts",
+    "cyrene-preflight @ git+https://github.com/DoHorizon-AI/Cyrene-Platform.git@c59be6f2bd82489fbe933dadff84fc589e00afd9#subdirectory=sdk/python/cyrene_preflight",
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "uvicorn==0.52.4",
+    "grpcio==1.83.0",
+    "protobuf==7.36.0",
+    "cryptography==50.0.1",
+    "cyrene-plugin-runtime @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@c3f75689ebb10b2e07b3816310e768d74ae6cc10#subdirectory=sdk/python/cyrene_plugin_runtime",
+]
+
+[project.scripts]
+cyrene-yield = "cy_exec.training.product_cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools==1.83.0",
+    "pytest>=7.4.0",
+    "hypothesis>=6.100.0",
+    "ruff>=0.11.0",
+    "mypy==2.3.1",
+    "jsonschema==4.26.0",
+    "openapi-spec-validator==0.9.0",
+    "types-PyYAML==6.0.12.20260906",
+    "types-psutil==7.2.2.20260906",
+    "types-grpcio==1.83.0.20260730",
+    "types-protobuf==7.35.1.20260906",
+    "cyrene-hf-model-analyzer @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@c3f75689ebb10b2e07b3816310e768d74ae6cc10#subdirectory=plugins/models/hf-model-analyzer",
+    "cyrene-compat-rules @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@c3f75689ebb10b2e07b3816310e768d74ae6cc10#subdirectory=plugins/policy/compat-rules",
+    "cyrene-dataset-validator @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@c3f75689ebb10b2e07b3816310e768d74ae6cc10#subdirectory=plugins/tools/dataset-validator",
+]
+
+[tool.setuptools.packages.find]
+where = ["training/core/src", "sdk/python/cyrene_yield_contracts/src"]
+
+[tool.setuptools.package-data]
+"cy_exec.training.executors" = ["kernel.desc", "kernel-descriptor.json"]
+"cyrene_yield_contracts" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["training/core/tests"]
+pythonpath = ["training/core/src", "training/core/tests", "sdk/python/cyrene_yield_contracts/src"]
+addopts = "-ra --ignore=training/core/tests/fixtures"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+follow_imports = "silent"
+mypy_path = ["sdk/python/cyrene_yield_contracts/src"]
+files = [
+    "training/core/src/cy_exec/training/product_api.py",
+    "training/core/src/cy_exec/training/product_models.py",
+    "training/core/src/cy_exec/training/product_service.py",
+    "training/core/src/cy_exec/training/product_store.py",
+    "training/core/src/cy_exec/training/product_results.py",
+    "training/core/src/cy_exec/training/product_cli.py",
+    "training/core/src/cy_exec/training/executors/kernel_rpc.py",
+    "training/core/src/cy_exec/training/executors/kernel_training.py",
+    "training/core/src/cy_exec/training/executors/training_worker.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["cy_artifacts", "cy_artifacts.*", "cyrene_preflight", "cyrene_preflight.*"]
+follow_untyped_imports = true
+
+[tool.uv]
+# The accepted runtime SDK declares the older protobuf-4 ABI. Yield's current
+# grpcio-tools lane is pinned to protobuf 7; the SDK's generated gRPC bindings
+# are wire-compatible, so keep one deterministic process ABI and document this
+# resolver override until the SDK republishes a widened metadata constraint.
+override-dependencies = ["grpcio==1.83.0", "protobuf==7.36.0"]

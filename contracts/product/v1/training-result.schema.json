@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "$ref": "./generated/platform/artifact-ref.schema.json"
+    },
+    "ResourceRef": {
+      "additionalProperties": false,
+      "description": "Opaque, versioned identity owned by the source Product.",
+      "properties": {
+        "uri": {
+          "pattern": "^(https?://|cyrene://)[^\\s]+$",
+          "title": "Uri",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "resourceVersion": {
+          "minimum": 1,
+          "title": "Resourceversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "uri",
+        "id",
+        "resourceVersion"
+      ],
+      "title": "ResourceRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "resourceRef": {
+      "$ref": "#/$defs/ResourceRef"
+    },
+    "trainingRun": {
+      "$ref": "#/$defs/ResourceRef"
+    },
+    "datasetVersion": {
+      "$ref": "#/$defs/ResourceRef"
+    },
+    "adapterArtifact": {
+      "$ref": "#/$defs/ArtifactRef"
+    },
+    "checkpointArtifacts": {
+      "items": {
+        "$ref": "#/$defs/ArtifactRef"
+      },
+      "title": "Checkpointartifacts",
+      "type": "array"
+    },
+    "modelVersion": {
+      "$ref": "./model-version.schema.json"
+    },
+    "createdAt": {
+      "format": "date-time",
+      "title": "Createdat",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "resourceRef",
+    "trainingRun",
+    "datasetVersion",
+    "adapterArtifact",
+    "checkpointArtifacts",
+    "modelVersion",
+    "createdAt"
+  ],
+  "title": "TrainingResultResource",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.cyrene.dev/yield/product/v1/training-result.schema.json"
+}
