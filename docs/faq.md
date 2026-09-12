@@ -24,11 +24,11 @@ Catalyst owns ingestion and raw cleaning. Yield consumes a `DatasetRef` and owns
 
 Catalyst 负责数据摄取与原始清洗。Yield 消费 `DatasetRef`，并负责引擎契约要求的训练专属采样或预处理。
 
-## Why is `InProcessKernelPort` restricted? / 为什么限制 `InProcessKernelPort`？
+## Why does Yield have no local execution fallback? / 为什么 Yield 没有本地执行回退？
 
-It is a test-only convenience boundary. Production execution must use the canonical Platform worker/operation contract so resource leases, cancellation, and lifecycle evidence remain authoritative.
+Platform owns process trees, resource leases, cancellation, and cleanup evidence. If its execution binding is absent, Yield reports `YIELD_EXECUTION_NOT_CONFIGURED` instead of creating a second local authority.
 
-它是仅供测试的便利边界。生产执行必须使用标准 Platform worker/operation 契约，确保资源租约、取消与生命周期证据保持权威。
+Platform 负责进程树、资源租约、取消与回收证据。执行绑定缺失时，Yield 返回 `YIELD_EXECUTION_NOT_CONFIGURED`，不会建立第二套本地权威。
 
 ## Where should LLaMA Factory changes go? / LLaMA Factory 变更应放在哪里？
 

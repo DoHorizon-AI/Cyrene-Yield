@@ -5,9 +5,17 @@ Single product call chain:
     TrainingSpec
       -> TrainingRuntime / TrainingAttempt
         -> TrainingEngineAdapter (Plugins-owned LLaMA Factory)
-          -> Executor (LocalProcess | CyreneKernel)
+          -> explicit Platform-backed execution adapter
 """
 
+from .capability_seam import (
+    YIELD_TRAINING_RUNTIME_CAPABILITY,
+    YIELD_TRAINING_RUNTIME_INTERFACE_VERSION,
+    YIELD_TRAINING_RUNTIME_REQUIREMENT,
+    TrainingRuntimeRequirement,
+    YieldTrainingRuntimeAdapter,
+    YieldTrainingRuntimeResolver,
+)
 from .contracts import (
     CheckpointSpec,
     DistributedSpec,
@@ -22,20 +30,12 @@ from .contracts import (
     TrainingSpec,
     TrainingStatus,
 )
-from .engines import available_engines, get_engine
-from .executors import CyreneKernelExecutor, LocalProcessExecutor, TrainingExecutor
-from .runtime import TrainingRuntime, TrainingSession, get_training_runtime
-from .preflight import TrainingPreflight
-from .tiny_dry_run import TinyDryRun, TinyDryRunGateError, TinyDryRunResult, TinyDryRunStatus
 from .control_plane import TrainingControlPlane, TrainingPlanCompiler, TrainingStateRecoveryError
-from .capability_seam import (
-    YieldTrainingRuntimeAdapter,
-    YieldTrainingRuntimeResolver,
-    YIELD_TRAINING_RUNTIME_CAPABILITY,
-    YIELD_TRAINING_RUNTIME_INTERFACE_VERSION,
-    YIELD_TRAINING_RUNTIME_REQUIREMENT,
-    TrainingRuntimeRequirement,
-)
+from .engines import available_engines, get_engine
+from .executors import KernelTrainingConfiguration, KernelTrainingExecutor, TrainingExecutor
+from .preflight import TrainingPreflight
+from .runtime import TrainingRuntime, TrainingSession
+from .tiny_dry_run import TinyDryRun, TinyDryRunGateError, TinyDryRunResult, TinyDryRunStatus
 
 __all__ = [
     "CheckpointSpec",
@@ -52,12 +52,11 @@ __all__ = [
     "TrainingStatus",
     "available_engines",
     "get_engine",
-    "CyreneKernelExecutor",
-    "LocalProcessExecutor",
+    "KernelTrainingConfiguration",
+    "KernelTrainingExecutor",
     "TrainingExecutor",
     "TrainingRuntime",
     "TrainingSession",
-    "get_training_runtime",
     "TrainingPreflight",
     "TinyDryRun",
     "TinyDryRunGateError",

@@ -27,9 +27,8 @@ from cyrene_preflight import AcceleratorFacts, HardwareFacts
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..contracts import TrainingLaunchSpec
-from .base import CancelOutcome, ProcessHandle
+from .base import CancelOutcome, ExecutionControlError, ProcessHandle
 from .kernel_rpc import KernelClient, context
-from .plugin_control import WorkloadControlError
 
 
 class KernelTrainingConfiguration(BaseModel):
@@ -130,7 +129,7 @@ class KernelTrainingExecutor:
             facts = self._admit(launch)
         except (grpc.RpcError, OSError, ValueError) as exc:
             # Admission and inventory failures happen before any lease is acquired.
-            raise WorkloadControlError(
+            raise ExecutionControlError(
                 "YIELD_KERNEL_ADMISSION_FAILED: check the selected host and trainer profile",
                 cleanup_attempted=False,
                 lost=False,
@@ -213,7 +212,7 @@ class KernelTrainingExecutor:
                         released = True
                     except (grpc.RpcError, OSError, ValueError):
                         pass  # Propagated as LOST, never a successful cleanup receipt.
-                raise WorkloadControlError(
+                raise ExecutionControlError(
                     "YIELD_KERNEL_START_FAILED: inspect the execution host diagnostics",
                     cleanup_attempted=receipt["lease"] is not None,
                     lost=not released,

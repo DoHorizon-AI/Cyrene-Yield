@@ -1,4 +1,4 @@
-"""Guardrail: production mapping must not revive origin/main AgentService."""
+"""Guardrail: Yield must not regain a local or duplicate Kernel executor."""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/tests/test_kernel_legacy_guard.py
 # │ Module: training/core/tests/test_kernel_legacy_guard
@@ -6,7 +6,6 @@
 # │
 # │ 模块职责：Yield 核心测试模块——验证统一训练运行时及其契约。
 # └─────────────────────────────────────────────────────────────────────┘
-
 
 from __future__ import annotations
 
@@ -38,12 +37,26 @@ def test_production_training_code_does_not_reference_legacy_agent_service():
 
 
 def test_node_agent_shim_was_removed():
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "cy_exec"
-        / "training"
-        / "executors"
-        / "node_agent.py"
-    )
+    path = Path(__file__).resolve().parents[1] / "src" / "cy_exec" / "training" / "executors" / "node_agent.py"
     assert not path.exists()
+
+
+def test_only_platform_backed_executor_remains():
+    executor_root = Path(__file__).resolve().parents[1] / "src" / "cy_exec" / "training" / "executors"
+    forbidden = {
+        "cyrene_kernel.py",
+        "inprocess_kernel.py",
+        "kernel_commands.py",
+        "kernel_events.py",
+        "kernel_mapping.py",
+        "kernel_port.py",
+        "kernel_uds.py",
+        "local_process.py",
+        "plugin_control.py",
+        "workload_stager.py",
+    }
+
+    assert forbidden.isdisjoint(path.name for path in executor_root.iterdir())
+    runtime = (executor_root.parent / "runtime.py").read_text(encoding="utf-8")
+    assert "LocalProcessExecutor" not in runtime
+    assert "executor or" not in runtime

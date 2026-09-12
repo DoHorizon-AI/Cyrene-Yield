@@ -10,8 +10,7 @@
 from __future__ import annotations
 
 import pytest
-
-from cy_exec.training.contracts import EngineKind, FORBIDDEN_LAUNCH_ENV, TrainingStatus
+from cy_exec.training.contracts import FORBIDDEN_LAUNCH_ENV, EngineKind, TrainingStatus
 from cy_exec.training.engines import get_engine
 from cy_exec.training.runtime import TrainingRuntime
 from training_tck_helpers import make_spec
@@ -63,3 +62,13 @@ def test_runtime_is_the_status_authority(tmp_path):
     assert session.status == TrainingStatus.FAILED
     assert runtime.get(session.session_id) is session
     assert get_engine(spec.engine).__class__.__name__.endswith("Adapter")
+
+
+def test_runtime_without_platform_execution_fails_closed(tmp_path):
+    spec = make_spec(tmp_path, EngineKind.LLAMA_FACTORY)
+    runtime = TrainingRuntime()
+
+    session = runtime.submit(spec)
+
+    assert session.status == TrainingStatus.FAILED
+    assert session.error.startswith("YIELD_EXECUTION_NOT_CONFIGURED")

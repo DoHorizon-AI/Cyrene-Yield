@@ -12,16 +12,14 @@ Training-core regression tests.
 | `training/core/tests/test_artifact_plane.py` | Python implementation or test module: test_artifact_plane.py. / Python 实现或测试模块：test_artifact_plane.py。 |
 | `training/core/tests/test_checkpoint_manager_pbt.py` | Python implementation or test module: test_checkpoint_manager_pbt.py. / Python 实现或测试模块：test_checkpoint_manager_pbt.py。 |
 | `training/core/tests/test_control_plane_conformance.py` | Python implementation or test module: test_control_plane_conformance.py. / Python 实现或测试模块：test_control_plane_conformance.py。 |
-| `training/core/tests/test_cyrene_kernel_executor.py` | Python implementation or test module: test_cyrene_kernel_executor.py. / Python 实现或测试模块：test_cyrene_kernel_executor.py。 |
 | `training/core/tests/test_environment_integration.py` | Python implementation or test module: test_environment_integration.py. / Python 实现或测试模块：test_environment_integration.py。 |
 | `training/core/tests/test_kernel_legacy_guard.py` | Python implementation or test module: test_kernel_legacy_guard.py. / Python 实现或测试模块：test_kernel_legacy_guard.py。 |
-| `training/core/tests/test_local_process_cancel.py` | Python implementation or test module: test_local_process_cancel.py. / Python 实现或测试模块：test_local_process_cancel.py。 |
+| `training/core/tests/test_kernel_training.py` | Platform Kernel adapter, signed installation, and cleanup evidence. / Platform Kernel 适配器、签名安装与回收证据。 |
 | `training/core/tests/test_platform_package_ownership.py` | Python implementation or test module: test_platform_package_ownership.py. / Python 实现或测试模块：test_platform_package_ownership.py。 |
 | `training/core/tests/test_training_contract.py` | Python implementation or test module: test_training_contract.py. / Python 实现或测试模块：test_training_contract.py。 |
 | `training/core/tests/test_training_control_plane.py` | Python implementation or test module: test_training_control_plane.py. / Python 实现或测试模块：test_training_control_plane.py。 |
 | `training/core/tests/test_training_preflight_and_tiny_dry_run.py` | Python implementation or test module: test_training_preflight_and_tiny_dry_run.py. / Python 实现或测试模块：test_training_preflight_and_tiny_dry_run.py。 |
 | `training/core/tests/test_training_tck.py` | Python implementation or test module: test_training_tck.py. / Python 实现或测试模块：test_training_tck.py。 |
-| `training/core/tests/test_workload_control.py` | Python implementation or test module: test_workload_control.py. / Python 实现或测试模块：test_workload_control.py。 |
 | `training/core/tests/training_tck_helpers.py` | Python implementation or test module: training_tck_helpers.py. / Python 实现或测试模块：training_tck_helpers.py。 |
 
 ## Suggested reading order / 推荐阅读顺序

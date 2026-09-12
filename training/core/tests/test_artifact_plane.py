@@ -10,24 +10,21 @@
 from __future__ import annotations
 
 import ast
-import json
 import os
 from pathlib import Path
 
-import pytest
-
 import cy_artifacts as artifact_module
+import pytest
 from cy_artifacts import (
     ArtifactIntegrityError,
     ArtifactKind,
     LocalArtifactProvider,
 )
 from cy_artifacts.local import LocalDirectoryFile, LocalDirectoryManifest
-from cyrene_yield_contracts import YieldArtifactKind
 from cy_exec.training.artifacts import publish_training_outputs
 from cy_exec.training.contracts import EngineKind
-from cy_exec.training.executors.workload_stager import MinimalWorkloadStager
 from cy_exec.training.runtime import TrainingRuntime
+from cyrene_yield_contracts import YieldArtifactKind
 from training_tck_helpers import make_spec
 
 
@@ -113,25 +110,6 @@ def test_directory_identity_ignores_mtime_and_rejects_traversal(tmp_path):
             digest="sha256:" + "0" * 64,
             size_bytes=0,
         )
-
-
-def test_training_spec_publish_stage_and_worker_read(tmp_path):
-    provider = LocalArtifactProvider(tmp_path / "store")
-    (tmp_path / "job").mkdir()
-    spec = make_spec(tmp_path / "job", EngineKind.LLAMA_FACTORY)
-    staged = MinimalWorkloadStager(provider).stage_spec(
-        spec,
-        staging_dir=str(tmp_path / "stage"),
-    )
-
-    assert staged.config_ref.kind == YieldArtifactKind.TRAINING_SPEC.value
-    assert Path(staged.worker_visible_path).name == "training-spec.json"
-    assert Path(staged.worker_visible_path).parent.name == "config"
-    assert staged.artifact_ref.uri.startswith("artifact://sha256/")
-    assert staged.artifact_ref.uri not in staged.worker_visible_path
-    assert Path(staged.worker_visible_path).read_text(encoding="utf-8") == json.dumps(
-        spec.to_dict(), sort_keys=True, separators=(",", ":")
-    )
 
 
 def test_training_outputs_publish_to_artifact_refs(tmp_path):

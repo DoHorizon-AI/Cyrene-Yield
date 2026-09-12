@@ -11,7 +11,6 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0.0",
     "PyYAML>=6.0",
-    "psutil>=5.9.0",
     "cyrene-artifacts @ git+https://github.com/DoHorizon-AI/Cyrene-Platform.git@c59be6f2bd82489fbe933dadff84fc589e00afd9#subdirectory=sdk/python/cyrene_artifacts",
     "cyrene-preflight @ git+https://github.com/DoHorizon-AI/Cyrene-Platform.git@c59be6f2bd82489fbe933dadff84fc589e00afd9#subdirectory=sdk/python/cyrene_preflight",
     "fastapi==0.141.1",
@@ -36,7 +35,6 @@ dev = [
     "jsonschema==4.26.0",
     "openapi-spec-validator==0.9.0",
     "types-PyYAML==6.0.12.20260906",
-    "types-psutil==7.2.2.20260906",
     "types-grpcio==1.83.0.20260730",
     "types-protobuf==7.35.1.20260906",
     "cyrene-hf-model-analyzer @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@c3f75689ebb10b2e07b3816310e768d74ae6cc10#subdirectory=plugins/models/hf-model-analyzer",

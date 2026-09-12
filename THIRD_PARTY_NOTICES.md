@@ -25,7 +25,6 @@ clean-root Product 源码的依赖。由于其再分发与溯源未获批准，�
 |---|---:|---|---|---|
 | `pydantic` | `2.13.4` | PyPI | `MIT` | Product/API validation |
 | `PyYAML` | `6.0.3` | PyPI | `MIT` | Configuration parsing |
-| `psutil` | `7.2.2` | PyPI | `BSD-3-Clause` | Process/resource facts |
 | `fastapi` | `0.141.1` | PyPI | `MIT` | HTTP API surface |
 | `httpx` | `0.28.1` | PyPI | `BSD-3-Clause` | Handoff client |
 | `uvicorn` | `0.52.4` | PyPI | `BSD-3-Clause` | ASGI entrypoint |
@@ -47,7 +46,7 @@ clean-root Product 源码的依赖。由于其再分发与溯源未获批准，�
 | `jsonschema` | `4.26.0` | `MIT` | Contract/schema checks |
 | `openapi-spec-validator` | `0.9.0` | `Apache-2.0` | OpenAPI validation |
 | `grpcio-tools` | `1.83.0` | `Apache-2.0` | Contract tooling |
-| `types-PyYAML`, `types-psutil`, `types-grpcio`, `types-protobuf` | locked in `uv.lock` | Verify each wheel notice in release SBOM | Type-only development inputs |
+| `types-PyYAML`, `types-grpcio`, `types-protobuf` | locked in `uv.lock` | Verify each wheel notice in release SBOM | Type-only development inputs |
 | `cyrene-hf-model-analyzer` | `0.3.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional model-analysis capability |
 | `cyrene-compat-rules` | `0.2.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional compatibility capability |
 | `cyrene-dataset-validator` | `0.2.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional dataset-validation capability |

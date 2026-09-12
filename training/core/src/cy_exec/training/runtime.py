@@ -1,41 +1,32 @@
-"""Product training runtime.
+"""Product training runtime over an explicitly configured Platform executor.
 
-This owns in-process engine execution state. Durable Product intent and
-attempt history belong to the Platform Control Plane; Engine adapters only
-inspect, validate, compile, parse events, and collect artifacts. Executors
-only start and stop process trees. Kernel Worker/Operation Lost maps to a
-TrainingAttempt first; the controller decides retry.
+Yield owns Product run and attempt projections. It never starts a local
+process tree when the Platform execution adapter is absent; missing execution
+authority is a stable, fail-closed Product outcome.
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/runtime.py
 # │ Module: training/core/src/cy_exec/training/runtime
-# │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ Role: Product training coordination over explicit Platform execution.
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
 
-
 from __future__ import annotations
 
+import sys
 import threading
 import time
 import uuid
-import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
 
 from cy_artifacts import ArtifactError, ArtifactProvider, LocalArtifactProvider
-from .environment import (
-    EnvironmentCandidate,
-    EnvironmentResolver,
-    EnvironmentResolutionStatus,
-    EnvironmentSpec,
-    HardwareRuntimeFacts,
-    local_environment_candidate,
-)
 from cyrene_preflight import HardwareFacts
+
+from .artifacts import publish_training_outputs
 from .contracts import (
     KernelBinding,
     KernelOperationRef,
@@ -49,10 +40,16 @@ from .contracts import (
     WorkloadConfigRef,
 )
 from .engines import get_engine
-from .executors import CancelOutcome, LocalProcessExecutor, ProcessHandle
+from .environment import (
+    EnvironmentCandidate,
+    EnvironmentResolutionStatus,
+    EnvironmentResolver,
+    EnvironmentSpec,
+    HardwareRuntimeFacts,
+    local_environment_candidate,
+)
+from .executors import CancelOutcome, ExecutionControlError, ProcessHandle
 from .executors.base import TrainingExecutor
-from .executors.plugin_control import WorkloadControlError
-from .artifacts import publish_training_outputs
 from .product_results import publish_adapter
 
 
@@ -63,17 +60,17 @@ class TrainingSession:
     session_id: str
     spec: TrainingSpec
     status: TrainingStatus = TrainingStatus.QUEUED
-    launch: Optional[TrainingLaunchSpec] = None
-    handle: Optional[ProcessHandle] = None
-    result: Optional[TrainingResult] = None
-    events: List[TrainingEvent] = field(default_factory=list)
+    launch: TrainingLaunchSpec | None = None
+    handle: ProcessHandle | None = None
+    result: TrainingResult | None = None
+    events: list[TrainingEvent] = field(default_factory=list)
     error: str = ""
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    run: Optional[TrainingRun] = None
+    run: TrainingRun | None = None
 
     @property
-    def current_attempt(self) -> Optional[TrainingAttempt]:
+    def current_attempt(self) -> TrainingAttempt | None:
         return self.run.current_attempt if self.run is not None else None
 
 
@@ -90,21 +87,21 @@ class TrainingRuntime:
     """Owns in-process execution sessions for every engine and executor."""
 
     def __init__(
-            self,
-            executor: Optional[TrainingExecutor] = None,
-            artifact_provider: Optional[ArtifactProvider] = None,
-            environment_resolver: Optional[EnvironmentResolver] = None,
-            environment_catalog: Optional[Sequence[EnvironmentCandidate]] = None,
-            hardware_facts: Optional[HardwareFacts] = None,
+        self,
+        executor: TrainingExecutor | None = None,
+        artifact_provider: ArtifactProvider | None = None,
+        environment_resolver: EnvironmentResolver | None = None,
+        environment_catalog: Sequence[EnvironmentCandidate] | None = None,
+        hardware_facts: HardwareFacts | None = None,
     ) -> None:
-        self._executor = executor or LocalProcessExecutor()
+        self._executor = executor
         self._artifact_provider = artifact_provider
         self._environment_resolver = environment_resolver or EnvironmentResolver()
         self._environment_catalog = tuple(
             environment_catalog if environment_catalog is not None else (local_environment_candidate(),)
         )
         self._hardware_facts = hardware_facts
-        self._sessions: Dict[str, TrainingSession] = {}
+        self._sessions: dict[str, TrainingSession] = {}
         self._lock = threading.Lock()
 
     def submit(self, spec: TrainingSpec) -> TrainingSession:
@@ -153,20 +150,16 @@ class TrainingRuntime:
         session = self._require(session_id)
         attempt = session.current_attempt
         if session.status not in (
-                TrainingStatus.AWAITING_RETRY,
-                TrainingStatus.LOST,
-                TrainingStatus.FAILED,
+            TrainingStatus.AWAITING_RETRY,
+            TrainingStatus.LOST,
+            TrainingStatus.FAILED,
         ):
-            raise ValueError(
-                f"Cannot retry session {session_id} in status {session.status.value}"
-            )
+            raise ValueError(f"Cannot retry session {session_id} in status {session.status.value}")
         if attempt is not None and attempt.status not in (
-                TrainingStatus.LOST,
-                TrainingStatus.FAILED,
+            TrainingStatus.LOST,
+            TrainingStatus.FAILED,
         ):
-            raise ValueError(
-                f"Cannot retry attempt {attempt.attempt_id} in status {attempt.status.value}"
-            )
+            raise ValueError(f"Cannot retry attempt {attempt.attempt_id} in status {attempt.status.value}")
         adapter = get_engine(session.spec.engine)
         launch = adapter.compile(session.spec)
         launch.environment_lock = self._resolve_environment_lock(session.spec)
@@ -174,10 +167,10 @@ class TrainingRuntime:
         self._start_attempt(session, launch)
         return session
 
-    def get(self, session_id: str) -> Optional[TrainingSession]:
+    def get(self, session_id: str) -> TrainingSession | None:
         return self._sessions.get(session_id)
 
-    def list_sessions(self, status: Optional[TrainingStatus] = None, limit: int = 100) -> List[TrainingSession]:
+    def list_sessions(self, status: TrainingStatus | None = None, limit: int = 100) -> list[TrainingSession]:
         sessions = list(self._sessions.values())
         if status is not None:
             sessions = [item for item in sessions if item.status == status]
@@ -192,7 +185,8 @@ class TrainingRuntime:
             return session
         adapter = get_engine(session.spec.engine)
         attempt = session.current_attempt
-        for line in self._executor.read_new_output(session.handle):
+        executor = self._require_executor()
+        for line in executor.read_new_output(session.handle):
             event = adapter.parse_event(line)
             if event is not None:
                 session.events.append(event)
@@ -202,7 +196,7 @@ class TrainingRuntime:
         if session.handle.extra.get("lost"):
             self._mark_attempt_lost(session, "worker/operation lost")
             return session
-        code = self._executor.poll(session.handle)
+        code = executor.poll(session.handle)
         if code is None:
             return session
         status = TrainingStatus.COMPLETED if code == 0 else TrainingStatus.FAILED
@@ -214,7 +208,8 @@ class TrainingRuntime:
         session.result = adapter.collect_result(session.spec, session.launch, code, status)
         try:
             session.result.artifacts = publish_training_outputs(
-                self._provider_for(session.spec), session.launch,
+                self._provider_for(session.spec),
+                session.launch,
             )
             source = session.spec.extra.get("base_source")
             if status is TrainingStatus.COMPLETED and isinstance(source, dict):
@@ -249,14 +244,22 @@ class TrainingRuntime:
                 return self._sessions[session_id]
             run = TrainingRun(run_id=session_id, spec=spec, status=TrainingStatus.RUNNING)
             attempt = TrainingAttempt(
-                attempt_id=str(launch.extra["attempt_id"]), run_id=session_id,
-                ordinal=1, spec=spec, status=TrainingStatus.RUNNING,
-                launch=launch, binding=_binding_from_handle(handle),
+                attempt_id=str(launch.extra["attempt_id"]),
+                run_id=session_id,
+                ordinal=1,
+                spec=spec,
+                status=TrainingStatus.RUNNING,
+                launch=launch,
+                binding=_binding_from_handle(handle),
             )
             run.attempts.append(attempt)
             session = TrainingSession(
-                session_id=session_id, spec=spec, status=TrainingStatus.RUNNING,
-                launch=launch, handle=handle, run=run,
+                session_id=session_id,
+                spec=spec,
+                status=TrainingStatus.RUNNING,
+                launch=launch,
+                handle=handle,
+                run=run,
             )
             self._sessions[session_id] = session
             return session
@@ -267,7 +270,7 @@ class TrainingRuntime:
         return LocalArtifactProvider(Path(spec.output_dir).parent / ".cyrene-artifacts")
 
     @property
-    def hardware_facts(self) -> Optional[HardwareFacts]:
+    def hardware_facts(self) -> HardwareFacts | None:
         """Canonical Node inventory projection supplied by the runtime host."""
 
         return self._hardware_facts
@@ -306,7 +309,7 @@ class TrainingRuntime:
             raise ValueError(f"environment resolution {resolution.status.value}: {reasons}")
         return resolution.require_lock()
 
-    def wait(self, session_id: str, timeout: Optional[float] = None, poll_interval: float = 0.2) -> TrainingSession:
+    def wait(self, session_id: str, timeout: float | None = None, poll_interval: float = 0.2) -> TrainingSession:
         deadline = None if timeout is None else time.time() + timeout
         while True:
             session = self.poll(session_id)
@@ -319,10 +322,10 @@ class TrainingRuntime:
     def cancel(self, session_id: str, timeout: float = 15.0) -> TrainingSession:
         session = self._require(session_id)
         if session.status in (
-                TrainingStatus.COMPLETED,
-                TrainingStatus.FAILED,
-                TrainingStatus.CANCELLED,
-                TrainingStatus.AWAITING_RETRY,
+            TrainingStatus.COMPLETED,
+            TrainingStatus.FAILED,
+            TrainingStatus.CANCELLED,
+            TrainingStatus.AWAITING_RETRY,
         ):
             return session
         if session.status == TrainingStatus.LOST:
@@ -349,7 +352,7 @@ class TrainingRuntime:
         if attempt is not None:
             attempt.status = TrainingStatus.CANCELLING
 
-        outcome: CancelOutcome = self._executor.cancel(session.handle, timeout=timeout)
+        outcome: CancelOutcome = self._require_executor().cancel(session.handle, timeout=timeout)
         adapter = get_engine(session.spec.engine)
         launch = session.launch or _empty_launch(session.spec)
         cleanup_ok = bool(outcome.stopped and outcome.cleanup_confirmed and not outcome.remaining_pids)
@@ -404,8 +407,8 @@ class TrainingRuntime:
         launch.extra["product_spec"] = session.spec.to_dict()
         launch.extra["attempt_id"] = attempt.attempt_id
         try:
-            handle = self._executor.start(launch)
-        except WorkloadControlError as exc:
+            handle = self._require_executor().start(launch)
+        except ExecutionControlError as exc:
             status = TrainingStatus.LOST if exc.lost else TrainingStatus.FAILED
             attempt.status = status
             attempt.error = str(exc)
@@ -449,6 +452,19 @@ class TrainingRuntime:
         if session is None:
             raise KeyError(f"Unknown training session: {session_id}")
         return session
+
+    def _require_executor(self) -> TrainingExecutor:
+        """Return the configured Platform adapter or fail closed.
+
+        Returns:
+            The explicit execution port supplied by the Product composition root.
+        Raises:
+            ExecutionControlError: If no Platform execution binding is configured.
+        """
+
+        if self._executor is None:
+            raise ExecutionControlError("YIELD_EXECUTION_NOT_CONFIGURED: configure the Platform execution adapter")
+        return self._executor
 
 
 def _binding_from_handle(handle: ProcessHandle) -> KernelBinding:
@@ -501,8 +517,8 @@ def _empty_launch(spec: TrainingSpec) -> TrainingLaunchSpec:
 
 
 def _environment_hardware_facts(
-        facts: Optional[HardwareFacts],
-) -> Optional[HardwareRuntimeFacts]:
+    facts: HardwareFacts | None,
+) -> HardwareRuntimeFacts | None:
     """Map the canonical Node inventory to Environment's smaller generic view."""
 
     if facts is None:
@@ -518,13 +534,3 @@ def _environment_hardware_facts(
         driver_version=facts.driver_version,
         accelerator_runtime=facts.accelerator_runtime,
     )
-
-
-_runtime: Optional[TrainingRuntime] = None
-
-
-def get_training_runtime() -> TrainingRuntime:
-    global _runtime
-    if _runtime is None:
-        _runtime = TrainingRuntime()
-    return _runtime

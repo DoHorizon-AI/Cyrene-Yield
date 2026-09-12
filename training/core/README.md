@@ -13,12 +13,12 @@ not a complete in-tree migration of the upstream LLaMA-Factory tree.
 
 The generic Kernel control-plane projection is pinned to Cyrene-Platform
 `c59be6f2bd82489fbe933dadff84fc589e00afd9`. See
-`docs/KERNEL_CANONICAL_BASE.md`. Production `CyreneKernelExecutor` must not
-use `cy.llm.AgentService` / `ExecuteCommandStream`.
+`docs/KERNEL_CANONICAL_BASE.md`. `KernelTrainingExecutor` is the only retained
+execution adapter; missing configuration fails closed.
 
 Per-attempt training configuration stays in Yield and its selected Plugin
 contract. KernelAuthority receives only generic resource, lease, operation and
-opaque execution identity. `InProcessKernelPort` is TEST ONLY.
+opaque execution identity. Yield contains no local or in-process executor.
 
 每次尝试的训练配置保留在 Yield 及其选定的 Plugin 契约中。KernelAuthority 只接收
-通用资源、租约、操作和不透明执行身份；`InProcessKernelPort` 仅供测试使用。
+通用资源、租约、操作和不透明执行身份；Yield 不包含本地或进程内执行器。

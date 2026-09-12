@@ -1,27 +1,27 @@
-"""TrainingLaunchSpec: the process/container that should be started.
+"""Portable launch intent compiled by a Plugins-owned training adapter.
 
-Compiled by a TrainingEngineAdapter. Consumed by any Executor
-(LocalProcessExecutor today, CyreneKernelExecutor later). This type must
-not import or mention a concrete executor.
+The Product passes this value to its explicit Platform execution port. The
+contract carries workload requirements, never a local process implementation
+or machine-level device assignment.
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/launch.py
 # │ Module: training/core/src/cy_exec/training/contracts/launch
-# │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ Role: Portable Yield launch intent for Platform-backed execution.
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
 
-
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any
 
+from ..environment import EnvironmentLock
 from .checkpoint import CheckpointSpec
 from .distributed import DistributedSpec
 from .status import EngineKind, LaunchKind
-from ..environment import EnvironmentLock
 
 # Machine-level device assignment is an Executor/Kernel concern.
 FORBIDDEN_LAUNCH_ENV = frozenset(
@@ -44,7 +44,7 @@ class ResourceRequest:
     nproc_per_node: int = 1
     gpu_memory_gb: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "gpu_count": self.gpu_count,
             "world_size": self.world_size,
@@ -54,7 +54,7 @@ class ResourceRequest:
         }
 
     @classmethod
-    def from_distributed(cls, distributed: DistributedSpec) -> "ResourceRequest":
+    def from_distributed(cls, distributed: DistributedSpec) -> ResourceRequest:
         extra_mem = 0.0
         if distributed.extra:
             extra_mem = float(distributed.extra.get("gpu_memory_gb") or 0.0)
@@ -76,7 +76,7 @@ class MountSpec:
     kind: str = "bind"
     read_only: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "source": self.source,
             "target": self.target,
@@ -95,7 +95,7 @@ class OutputLayout:
     metrics: str = "metrics.json"
     manifest: str = "run-manifest.json"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "root": self.root,
             "model": self.model,
@@ -110,22 +110,22 @@ class TrainingLaunchSpec:
     """Final launch description produced by compile()."""
 
     engine: EngineKind
-    argv: List[str]
+    argv: list[str]
     work_dir: str
     distributed: DistributedSpec
     checkpoint: CheckpointSpec
     launch_kind: LaunchKind = LaunchKind.DIRECT
-    cwd: Optional[str] = None
-    env: Dict[str, str] = field(default_factory=dict)
+    cwd: str | None = None
+    env: dict[str, str] = field(default_factory=dict)
     resources: ResourceRequest = field(default_factory=ResourceRequest)
-    mounts: List[MountSpec] = field(default_factory=list)
+    mounts: list[MountSpec] = field(default_factory=list)
     output_layout: OutputLayout = field(default_factory=OutputLayout)
-    environment_lock: Optional[EnvironmentLock] = None
-    spec_artifact_path: Optional[str] = None
-    stdout_path: Optional[str] = None
-    stderr_path: Optional[str] = None
-    timeout_seconds: Optional[int] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
+    environment_lock: EnvironmentLock | None = None
+    spec_artifact_path: str | None = None
+    stdout_path: str | None = None
+    stderr_path: str | None = None
+    timeout_seconds: int | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if isinstance(self.engine, str):
@@ -147,11 +147,10 @@ class TrainingLaunchSpec:
         leaked = FORBIDDEN_LAUNCH_ENV.intersection(self.env)
         if leaked:
             raise ValueError(
-                "TrainingLaunchSpec.env must not contain machine-level device "
-                f"assignment keys: {sorted(leaked)}"
+                f"TrainingLaunchSpec.env must not contain machine-level device assignment keys: {sorted(leaked)}"
             )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "engine": self.engine.value,
             "argv": list(self.argv),
@@ -164,9 +163,7 @@ class TrainingLaunchSpec:
             "resources": self.resources.to_dict(),
             "mounts": [item.to_dict() for item in self.mounts],
             "output_layout": self.output_layout.to_dict(),
-            "environment_lock": (
-                None if self.environment_lock is None else self.environment_lock.to_dict()
-            ),
+            "environment_lock": (None if self.environment_lock is None else self.environment_lock.to_dict()),
             "spec_artifact_path": self.spec_artifact_path,
             "stdout_path": self.stdout_path,
             "stderr_path": self.stderr_path,
@@ -175,13 +172,14 @@ class TrainingLaunchSpec:
         }
 
     def assert_executor_agnostic(self) -> None:
-        """Guardrail: launch specs stay portable across executors."""
-        blob = str(self.to_dict()).lower().replace("-", "").replace("_", "")
-        if "localprocessexecutor" in blob or "cyrenekernelexecutor" in blob:
-            raise ValueError("TrainingLaunchSpec must not name a concrete executor")
+        """Guardrail: launch specs stay free of machine authority."""
+
+        leaked = FORBIDDEN_LAUNCH_ENV.intersection(self.env)
+        if leaked:
+            raise ValueError(f"TrainingLaunchSpec must not assign machine devices: {sorted(leaked)}")
 
 
-def default_training_mounts(dataset_path: str, output_dir: str) -> List[MountSpec]:
+def default_training_mounts(dataset_path: str, output_dir: str) -> list[MountSpec]:
     """Logical input/output mounts. Executor binds them onto the node."""
 
     return [
@@ -192,8 +190,8 @@ def default_training_mounts(dataset_path: str, output_dir: str) -> List[MountSpe
 
 def merge_executor_env(
     launch_env: Mapping[str, str],
-    assigned_env: Optional[Mapping[str, str]] = None,
-) -> Dict[str, str]:
+    assigned_env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     """Executor-side merge. Device assignment may be added here, not in the contract."""
 
     merged = dict(launch_env)

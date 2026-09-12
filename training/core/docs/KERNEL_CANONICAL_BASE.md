@@ -8,8 +8,9 @@ The immutable generic control-plane input for this Product revision is:
 Do not add training payloads, Plugin method schemas, argv or environment fields
 to Platform contracts. Yield and the selected Plugin own those values.
 
-Production CyreneKernelExecutor talks to KernelAuthorityService:
+Production `KernelTrainingExecutor` talks to `KernelAuthorityService`:
 
 AcquireLease → StartWorker(execution_ref) → CancelOperation / StopWorker
 
-InProcessKernelPort is TEST ONLY. It is not production authority.
+Yield has no in-process or local execution fallback. Missing Platform authority
+is reported as `YIELD_EXECUTION_NOT_CONFIGURED`.

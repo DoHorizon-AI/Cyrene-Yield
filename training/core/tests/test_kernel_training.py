@@ -15,12 +15,11 @@ from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from google.protobuf import json_format, message_factory
-
-from cy_exec.training.contracts import TrainingLaunchSpec, EngineKind, DistributedSpec, CheckpointSpec
+from cy_exec.training.contracts import CheckpointSpec, DistributedSpec, EngineKind, TrainingLaunchSpec
+from cy_exec.training.executors import ExecutionControlError
 from cy_exec.training.executors.kernel_rpc import KernelClient
 from cy_exec.training.executors.kernel_training import KernelTrainingConfiguration, KernelTrainingExecutor
-from cy_exec.training.executors.plugin_control import WorkloadControlError
+from google.protobuf import json_format, message_factory
 
 
 class ContractKernel:
@@ -146,7 +145,7 @@ def test_start_failure_retains_receipt_and_requires_cleanup(tmp_path, monkeypatc
     executor, kernel, _key, launch = configured(tmp_path, monkeypatch)
     kernel.fail_start = True
     try:
-        with pytest.raises(WorkloadControlError) as caught:
+        with pytest.raises(ExecutionControlError) as caught:
             executor.start(launch)
         assert caught.value.cleanup_attempted and not caught.value.lost
         assert kernel.calls[-1][0] == "ReleaseLease"
@@ -160,7 +159,7 @@ def test_shared_wsl_device_needs_explicit_operator_admission(tmp_path, monkeypat
     executor, kernel, _key, launch = configured(tmp_path, monkeypatch)
     kernel.shared = True
     try:
-        with pytest.raises(WorkloadControlError, match="YIELD_KERNEL_ADMISSION_FAILED") as caught:
+        with pytest.raises(ExecutionControlError, match="YIELD_KERNEL_ADMISSION_FAILED") as caught:
             executor.start(launch)
         assert not caught.value.lost and not caught.value.cleanup_attempted
         assert kernel.calls == []
