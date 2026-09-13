@@ -19,7 +19,7 @@ not approved for public redistribution.
 
 Yield consumes the DirectPluginRuntime client SDK and its test-only preflight
 owner packages directly from the immutable Plugins revision
-`c3f75689ebb10b2e07b3816310e768d74ae6cc10`. No Plugin SDK or capability
+`3afbac4d386eb7a27f6778149187884820c0b7f6`. No Plugin SDK or capability
 implementation is vendored in this repository. Production receives opaque
 `connection_ref` values and never imports the implementation packages.
 
