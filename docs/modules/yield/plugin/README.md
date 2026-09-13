@@ -10,7 +10,7 @@ This Plugins-owned backend provides the optional training engine capability used
 
 | Path | Responsibility / 职责 |
 |---|---|
-| [Plugin README](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/c3f75689ebb10b2e07b3816310e768d74ae6cc10/plugins/training/llama-factory/README.md) | Plugin backend usage and guided workflow / 插件后端用法与引导式工作流 |
+| [Plugin README](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/3afbac4d386eb7a27f6778149187884820c0b7f6/plugins/training/llama-factory/README.md) | Plugin backend usage and guided workflow / 插件后端用法与引导式工作流 |
 | `plugins/training/llama-factory/src/llamafactory/data/` | Dataset and multimodal processing / 数据集与多模态处理 |
 | `plugins/training/llama-factory/src/llamafactory/model/` | Model loading and adapters / 模型加载与适配器 |
 | `plugins/training/llama-factory/src/llamafactory/train/` | Training workflows and trainers / 训练工作流与训练器 |

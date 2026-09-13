@@ -33,7 +33,7 @@ clean-root Product 源码的依赖。由于其再分发与溯源未获批准，�
 | `cryptography` | `50.0.1` | PyPI | `Apache-2.0 OR BSD-3-Clause` | Signing and cryptographic primitives |
 | `cyrene-artifacts` | `0.1.0` | Platform Git SHA `c59be6f2bd82489fbe933dadff84fc589e00afd9` | `Apache-2.0` declared by owner manifest | Artifact contract/provider |
 | `cyrene-preflight` | `0.1.0` | Platform Git SHA `c59be6f2bd82489fbe933dadff84fc589e00afd9` | `Apache-2.0` declared by owner manifest | Resource-fact/preflight contract |
-| `cyrene-plugin-runtime` | `0.2.0` | Plugins Git SHA `c3f75689ebb10b2e07b3816310e768d74ae6cc10` | `UNKNOWN`: owner package has no license field or nearest license file | Direct capability runtime |
+| `cyrene-plugin-runtime` | `0.2.0` | Plugins Git SHA `3afbac4d386eb7a27f6778149187884820c0b7f6` | `UNKNOWN`: owner package has no license field or nearest license file | Direct capability runtime |
 
 ## Development and contract dependencies / 开发与契约依赖
 
