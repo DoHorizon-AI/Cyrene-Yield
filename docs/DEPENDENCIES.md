@@ -18,13 +18,13 @@ opinion.
 
 The lockfiles are the source of truth for exact resolved versions and hashes.
 The Product lock points to Platform `c59be6f2bd82489fbe933dadff84fc589e00afd9`
-and Plugins `c3f75689ebb10b2e07b3816310e768d74ae6cc10`; the Plugins repository
+and Plugins `3afbac4d386eb7a27f6778149187884820c0b7f6`; the Plugins repository
 is currently private and several owner package manifests do not declare a
 license. An anonymous clean-clone build is therefore not yet available.
 
 锁文件是精确解析版本与摘要的事实来源。Product 锁文件指向 Platform
 `c59be6f2bd82489fbe933dadff84fc589e00afd9` 和 Plugins
-`c3f75689ebb10b2e07b3816310e768d74ae6cc10`；Plugins 当前仍为 private，且多个
+`3afbac4d386eb7a27f6778149187884820c0b7f6`；Plugins 当前仍为 private，且多个
 owner 包 manifest 没有声明许可证，因此匿名 clean clone 尚不可用。
 
 ## Direct package inventory / 直接包清单

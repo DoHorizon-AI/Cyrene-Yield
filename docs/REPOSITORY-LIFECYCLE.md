@@ -66,14 +66,14 @@ This repository does **not** distribute standalone release zip files directly to
 ## 6. Public-readiness gates / 公开准备门禁
 
 The pinned Platform revision is public, but the Plugins revision
-`c3f75689ebb10b2e07b3816310e768d74ae6cc10` is currently private and several
+`3afbac4d386eb7a27f6778149187884820c0b7f6` is currently private and several
 owner package manifests do not declare a license. A public release therefore
 requires an anonymously reachable, license-reviewed dependency closure and a
 fresh lockfile. The current repository policy records this as
 `public_requires_private: true`.
 
 Platform 锁定修订版已公开，但 Plugins 修订版
-`c3f75689ebb10b2e07b3816310e768d74ae6cc10` 当前仍为 private，且多个 owner 包
+`3afbac4d386eb7a27f6778149187884820c0b7f6` 当前仍为 private，且多个 owner 包
 manifest 未声明许可证。因此公开发布前必须取得可匿名访问且完成许可证审查的依赖
 闭包，并刷新锁文件。当前 repository policy 以
 `public_requires_private: true` 记录该事实。
