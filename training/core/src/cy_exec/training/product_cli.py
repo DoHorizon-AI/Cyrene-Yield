@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import httpx
 import uvicorn
 
 from .executors.kernel_training import KernelTrainingConfiguration
@@ -92,8 +93,45 @@ def _runtime_from_manifests(
     )
 
 
+def _run_command(arguments: list[str]) -> int:
+    """Answer one read-only or cancellation question about a TrainingRun."""
+
+    parser = argparse.ArgumentParser(prog="cyrene-yield run", description="Inspect TrainingRuns")
+    parser.add_argument("--url", default="http://127.0.0.1:8092")
+    parser.add_argument("--token-env", help="Name of the Product credential variable")
+    commands = parser.add_subparsers(dest="run_command", required=True)
+    for name in ("status", "logs", "cancel"):
+        command = commands.add_parser(name)
+        command.add_argument("run_id")
+    args = parser.parse_args(arguments)
+    headers = {"Accept": "application/json"}
+    token = os.environ.get(args.token_env) if args.token_env else None
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    base = args.url.rstrip("/")
+    try:
+        with httpx.Client(base_url=base, headers=headers, timeout=60.0) as client:
+            if args.run_command == "cancel":
+                response = client.post(f"/api/v1/training-runs/{args.run_id}/actions/cancel")
+            elif args.run_command == "logs":
+                response = client.get(f"/api/v1/training-runs/{args.run_id}/attempts")
+            else:
+                response = client.get(f"/api/v1/training-runs/{args.run_id}")
+            if response.status_code >= 300:
+                print(f"Yield: HTTP {response.status_code}", file=sys.stderr)
+                return 1
+            print(json.dumps(response.json(), indent=2))
+    except httpx.HTTPError as exc:
+        print(f"Yield: connection failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> None:
     """Expose documented public APIs; operator paths never enter resource identities."""
+    arguments = sys.argv[1:]
+    if arguments and arguments[0] == "run":
+        raise SystemExit(_run_command(arguments[1:]))
     parser = argparse.ArgumentParser(description="Cyrene Yield Text Model Lifecycle V1")
     parser.add_argument("--state-directory", required=True, type=Path)
     parser.add_argument("--runtime-config", type=Path)
