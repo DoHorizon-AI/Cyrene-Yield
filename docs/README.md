@@ -28,6 +28,7 @@ private `Cyrene-Yield-history-archive`; they are not public release inputs.
 | [`API.md`](API.md) | Product/API contract and state model / 产品 API 契约与状态模型 |
 | [`REPOSITORY-LIFECYCLE.md`](REPOSITORY-LIFECYCLE.md) | Repository governance and release boundaries / 仓库治理与发布边界 |
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Dependency license record and SBOM procedure / 依赖许可证记录与 SBOM 流程 |
+| [`logging-and-errors.md`](logging-and-errors.md) | Cross-repository logging, error codes, and diagnostics specification / 跨仓日志、错误码与诊断规范 (草案 v0.1) |
 
 ## Suggested order / 推荐顺序
 
