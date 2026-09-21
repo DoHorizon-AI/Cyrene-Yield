@@ -43,7 +43,13 @@ from .product_models import (
     TrainingRunPage,
     TrainingRunResource,
 )
+from .errors import map_yield_error
 from .llama_factory_yaml import LlamaFactoryYamlError
+from .logging import (
+    emit_diagnostic_error,
+    parse_w3c_traceparent,
+    sanitize_request_id,
+)
 from .model_registry import (
     DirectPluginModelRegistry,
     ModelRegistryPort,
@@ -52,6 +58,7 @@ from .model_registry import (
 from .product_service import YieldService
 from .product_store import ProductStore
 from .runtime import TrainingRuntime
+
 
 
 def create_app(
@@ -155,6 +162,24 @@ def create_app(
     app = FastAPI(title="Cyrene Yield Product API", version="1.0.0", lifespan=lifespan)
     app.state.yield_service = service
 
+    @app.middleware("http")
+    async def propagate_trace(
+        request: Request, call_next: Any
+    ) -> Response:
+        parsed_trace = parse_w3c_traceparent(request.headers.get("traceparent"))
+        trace_id = parsed_trace[0] if parsed_trace else uuid4().hex
+        parent_span_id = parsed_trace[1] if parsed_trace else "0000000000000001"
+        request_id = sanitize_request_id(request.headers.get("x-request-id")) or uuid4().hex
+
+        request.state.trace_id = trace_id
+        request.state.span_id = parent_span_id
+        request.state.request_id = request_id
+
+        response = await call_next(request)
+        response.headers["traceparent"] = f"00-{trace_id}-0000000000000001-01"
+        response.headers["x-request-id"] = request_id
+        return response
+
     async def failure(request: Request, exc: Exception) -> JSONResponse:
         if isinstance(exc, KeyError):
             status, code = 404, "YIELD_RESOURCE_NOT_FOUND"
@@ -173,6 +198,30 @@ def create_app(
             if not code.startswith("YIELD_") or not code.replace("_", "").isalnum():
                 code = "YIELD_REQUEST_INVALID"
             status = 409 if any(item in code for item in ("CONFLICT", "STARTED", "PREPARED")) else 422
+
+        mapped = map_yield_error(code)
+        canonical_code = mapped["code"]
+        recovery_action = mapped.get("recovery_action")
+
+        trace_id = getattr(request.state, "trace_id", None) or uuid4().hex
+        span_id = getattr(request.state, "span_id", None)
+        request_id = getattr(request.state, "request_id", None)
+
+        emit_diagnostic_error(
+            "product.yield.error",
+            canonical_code,
+            str(exc),
+            trace_id=trace_id,
+            span_id=span_id,
+            attributes={
+                "request_id": request_id,
+                "cause_kind": mapped.get("cause_kind"),
+                "status": status,
+                "path": request.url.path,
+                "legacy_code": code,
+            },
+        )
+
         return JSONResponse(
             status_code=status,
             media_type="application/problem+json",
@@ -187,7 +236,9 @@ def create_app(
                 ),
                 "instance": request.url.path,
                 "retryable": status >= 500,
-                "traceId": uuid4().hex,
+                "traceId": trace_id,
+                "requestId": request_id,
+                "recoveryAction": recovery_action,
             },
         )
 
