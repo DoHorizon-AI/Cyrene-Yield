@@ -11,16 +11,33 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import RLock
 from typing import Any, List
+from uuid import UUID
 
 
 class ProductStore:
     """Serialize only Yield resources; never store model or dataset content."""
 
-    def __init__(self, path: Path) -> None:
+    LOG_SIZE_LIMIT_BYTES = 100 * 1024 * 1024  # 100 MiB
+    LOG_RETENTION_DAYS = 30
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        log_size_limit_bytes: int = LOG_SIZE_LIMIT_BYTES,
+        log_retention_days: int = LOG_RETENTION_DAYS,
+        logs_dir: Path | None = None,
+    ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = path
+        self.log_size_limit_bytes = log_size_limit_bytes
+        self.log_retention_days = log_retention_days
+        self._logs_dir = logs_dir or (path.parent / "raw_logs")
+        self._truncation_flags: set[str] = set()
         self._connection = sqlite3.connect(path, check_same_thread=False)
         self._lock = RLock()
         with self._connection:
@@ -35,6 +52,10 @@ class ProductStore:
                 "PRIMARY KEY(run_id, attempt_id, event_index));"
                 "CREATE INDEX IF NOT EXISTS ix_training_events_run_sequence"
                 " ON training_events(run_id, sequence);"
+                "CREATE TABLE IF NOT EXISTS run_terminals("
+                "run_id TEXT PRIMARY KEY, state TEXT NOT NULL, ended_at TEXT NOT NULL);"
+                "CREATE INDEX IF NOT EXISTS ix_run_terminals_ended_at"
+                " ON run_terminals(ended_at);"
             )
 
     def get(self, kind: str, resource_id: str) -> dict[str, Any]:
@@ -86,6 +107,12 @@ class ProductStore:
                 "INSERT OR IGNORE INTO resources VALUES ('result', ?, ?)",
                 (document["id"], json.dumps(document, sort_keys=True)),
             )
+            training_run = document.get("trainingRun") or document.get("training_run", {})
+            run_id = training_run.get("id") if isinstance(training_run, dict) else str(training_run).split("/")[-1]
+            if run_id:
+                ended_at_str = document.get("createdAt") or document.get("created_at")
+                ended_at = datetime.fromisoformat(ended_at_str) if ended_at_str else None
+                self.record_terminal_run(run_id, "COMPLETED", ended_at)
             return self.get("result", document["id"])
 
     def append_events(self, run_id: str, attempt_id: str, documents: List[dict[str, Any]]) -> List[dict[str, Any]]:
@@ -140,8 +167,7 @@ class ProductStore:
         bounded = max(1, min(int(limit), 20000))
         with self._lock:
             rows = self._connection.execute(
-                "SELECT document FROM training_events WHERE run_id=? AND sequence>?"
-                " ORDER BY sequence ASC LIMIT ?",
+                "SELECT document FROM training_events WHERE run_id=? AND sequence>? ORDER BY sequence ASC LIMIT ?",
                 (run_id, int(after_sequence), bounded),
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
@@ -173,6 +199,99 @@ class ProductStore:
         if row[0] != digest:
             raise ValueError("YIELD_IDEMPOTENCY_CONFLICT: key already identifies another action")
         return json.loads(row[1])
+
+    def _log_path(self, run_id: UUID | str) -> Path:
+        self._logs_dir.mkdir(parents=True, exist_ok=True)
+        return self._logs_dir / f"{run_id}.log"
+
+    def _truncation_flagged(self, run_id: str) -> bool:
+        with self._lock:
+            if run_id in self._truncation_flags:
+                return True
+            row = self._connection.execute(
+                "SELECT 1 FROM training_events WHERE run_id=? AND document LIKE '%Raw log limit reached%'",
+                (run_id,),
+            ).fetchone()
+            if row is not None:
+                self._truncation_flags.add(run_id)
+                return True
+            return False
+
+    def _flag_truncation(self, run_id: str) -> None:
+        with self._lock:
+            self._truncation_flags.add(run_id)
+
+    def append_raw_log(self, run_id: UUID | str, line: str) -> None:
+        """追加原始日志行；超过 100 MiB 后静默丢弃并记录一次 TRUNCATED 事件。"""
+        run_str = str(run_id)
+        log_path = self._log_path(run_str)
+        current_size = log_path.stat().st_size if log_path.exists() else 0
+        if current_size >= self.log_size_limit_bytes:
+            if not self._truncation_flagged(run_str):
+                self._flag_truncation(run_str)
+                self.append_events(
+                    run_str,
+                    "0",
+                    [
+                        {
+                            "kind": "warn",
+                            "message": ("Raw log limit reached (100 MiB). Further lines discarded."),
+                        }
+                    ],
+                )
+            return
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    def record_terminal_run(self, run_id: UUID | str, state: str, ended_at: datetime | None = None) -> None:
+        """Record a run transitioning to a terminal state (COMPLETED, FAILED, CANCELLED)."""
+        ts = (ended_at or datetime.now(UTC)).isoformat()
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT OR REPLACE INTO run_terminals(run_id, state, ended_at) VALUES(?,?,?)",
+                (str(run_id), state, ts),
+            )
+
+    def _terminal_run_ids_before(self, cutoff: datetime) -> list[str]:
+        terminal_ids: set[str] = set()
+        cutoff_iso = cutoff.isoformat()
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT run_id FROM run_terminals WHERE ended_at <= ?",
+                (cutoff_iso,),
+            ).fetchall()
+            for row in rows:
+                terminal_ids.add(row[0])
+
+            results = self._connection.execute("SELECT document FROM resources WHERE kind='result'").fetchall()
+            for (doc_text,) in results:
+                doc = json.loads(doc_text)
+                created_at_str = doc.get("createdAt") or doc.get("created_at")
+                if created_at_str:
+                    try:
+                        doc_dt = datetime.fromisoformat(created_at_str)
+                        if doc_dt <= cutoff:
+                            run_ref = doc.get("trainingRun") or doc.get("training_run", {})
+                            if isinstance(run_ref, dict):
+                                run_id = run_ref.get("id") or (run_ref.get("uri", "").split("/")[-1])
+                            else:
+                                run_id = str(run_ref).split("/")[-1]
+                            if run_id:
+                                terminal_ids.add(str(run_id))
+                    except (ValueError, TypeError):
+                        pass
+        return sorted(terminal_ids)
+
+    def purge_expired_logs(self) -> int:
+        """删除超过 30 天的终态 Run 的原始日志文件，保留结构化事件和 metadata。"""
+        cutoff = datetime.now(UTC) - timedelta(days=self.log_retention_days)
+        purged = 0
+        for run_id in self._terminal_run_ids_before(cutoff):
+            log_path = self._log_path(run_id)
+            if log_path.exists():
+                log_path.unlink()
+                purged += 1
+        return purged
 
     def close(self) -> None:
         self._connection.close()

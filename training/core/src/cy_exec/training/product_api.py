@@ -108,11 +108,28 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            service.store.purge_expired_logs()
+        except Exception:
+            pass
+
+        async def _periodic_purge() -> None:
+            while True:
+                try:
+                    await asyncio.sleep(24 * 3600)
+                    service.store.purge_expired_logs()
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    pass
+
+        purge_task = asyncio.create_task(_periodic_purge())
         worker = threading.Thread(target=reconcile, daemon=True)
         worker.start()
         try:
             yield
         finally:
+            purge_task.cancel()
             stopped.set()
             # Finish the current bounded RPC or Artifact publication before
             # closing its store and allowing another Product writer.
@@ -326,9 +343,7 @@ def create_app(
 
     @app.get("/api/v1/training-results/{result_id}/exports/llama-factory.yaml")
     def export_result_llama_factory(result_id: UUID) -> Response:
-        return _yaml_response(
-            service.export_result_llama_factory_yaml(result_id), f"training-result-{result_id}.yaml"
-        )
+        return _yaml_response(service.export_result_llama_factory_yaml(result_id), f"training-result-{result_id}.yaml")
 
     @app.post(
         "/api/v1/training-results/{result_id}/actions/send-to-exchange",
