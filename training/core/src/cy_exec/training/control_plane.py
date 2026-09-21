@@ -26,6 +26,8 @@ from .lifecycle import (
 from cyrene_preflight import PreflightStatus
 
 from .contracts import TrainingSpec, TrainingStatus
+from .contracts.checkpoint import CheckpointSpec
+from .contracts.events import TrainingEvent
 from .environment import EnvironmentLock
 from .preflight import TrainingPreflight
 from .runtime import TrainingRuntime
@@ -44,6 +46,7 @@ REAL_TRAINING_STEP_ID = "training-execution"
 TRAINING_SPEC_METADATA = "cyrene.yield.training_spec.v1"
 ENVIRONMENT_LOCK_METADATA = "cyrene.yield.environment_lock.v1"
 RESULT_ARTIFACTS_METADATA = "cyrene.yield.result_artifacts.v1"
+TRAINING_EVENTS_METADATA = "cyrene.yield.training_events.v1"
 EXECUTION_RECOVERY_UNAVAILABLE = "EXECUTION_RECOVERY_UNAVAILABLE"
 
 
@@ -123,6 +126,7 @@ class TrainingControlPlane:
         self._specs: Dict[str, TrainingSpec] = {}
         self._locks: Dict[str, EnvironmentLock] = {}
         self._execution_sessions: Dict[str, str] = {}
+        self._resume_checkpoints: Dict[str, str] = {}
         self._durable_tiny_attempt = durable_tiny_attempt
 
     def submit(self, spec: TrainingSpec, *, idempotency_key: Optional[str] = None) -> ProductRun:
@@ -149,6 +153,63 @@ class TrainingControlPlane:
     def load(self, run_id: str) -> ProductRun:
         return self._control.load(run_id)
 
+    def spec(self, run_id: str) -> TrainingSpec:
+        """Read the immutable validated intent for one ProductRun."""
+
+        return self._require_spec(run_id)
+
+    def environment_lock(self, run_id: str) -> EnvironmentLock:
+        """Read the immutable resolved environment identity for one ProductRun."""
+
+        return self._require_lock(run_id)
+
+    def preflight_result(self, run_id: str):
+        """Evaluate the configured preflight ports for one ProductRun."""
+
+        return self._preflight.evaluate(
+            self._require_spec(run_id),
+            self._require_lock(run_id),
+            self._runtime.hardware_facts,
+        )
+
+    def session_events(self, attempt_id: str):
+        """Return the in-process events observed for one durable Attempt."""
+
+        session = self._runtime.get(str(attempt_id))
+        return tuple(session.events) if session is not None else ()
+
+    def persisted_session_events(self, run_id: str, attempt_id: str):
+        """Return the redacted event snapshot saved with an Attempt."""
+
+        attempt = self._require_attempt(run_id, attempt_id)
+        raw = attempt.metadata.get(TRAINING_EVENTS_METADATA)
+        if not isinstance(raw, str):
+            return ()
+        try:
+            documents = json.loads(raw)
+        except json.JSONDecodeError:
+            return ()
+        if not isinstance(documents, list):
+            return ()
+        events = []
+        for document in documents:
+            if not isinstance(document, dict):
+                continue
+            try:
+                events.append(TrainingEvent(**document))
+            except (TypeError, ValueError):
+                continue
+        return tuple(events)
+
+    def resume(self, run_id: str, *, checkpoint_path: str, step_id: str = REAL_TRAINING_STEP_ID) -> ProductRun:
+        """Resume a stopped ProductRun from a complete checkpoint as a new Attempt."""
+
+        if not checkpoint_path or not Path(checkpoint_path).exists():
+            raise ValueError("YIELD_RESUME_CHECKPOINT_MISSING: stage a complete checkpoint before resume")
+        attempt = self._control.resume_attempt(run_id, step_id)
+        self._resume_checkpoints[str(attempt.attempt_id)] = checkpoint_path
+        return self._execute_step(run_id, attempt)
+
     def request_cancel(self, run_id: str) -> ProductRun:
         return self._control.request_cancel(run_id)
 
@@ -160,6 +221,21 @@ class TrainingControlPlane:
             if attempt.step_id == REAL_TRAINING_STEP_ID:
                 return _attempt_artifacts(attempt.metadata)
         return {}
+
+    def checkpoint_artifacts(self, run_id: str) -> Dict[str, ArtifactRef]:
+        """Return checkpoint artifacts from the most recent real Attempt.
+
+        Checkpoint identity is read from the persisted Attempt metadata rather
+        than from a private output path, so a resume request can be validated
+        after the control process has restarted.
+        """
+
+        artifacts = self.output_artifacts(run_id)
+        return {
+            name: reference
+            for name, reference in artifacts.items()
+            if name.startswith("checkpoint") or reference.kind == "checkpoint"
+        }
 
     def reconcile_once(self, run_id: str) -> ProductRun:
         """Perform one Product action; callers decide polling cadence."""
@@ -231,6 +307,11 @@ class TrainingControlPlane:
             engine = self._capability_resolver.resolve(YIELD_TRAINING_RUNTIME_REQUIREMENT)
             execution_spec = TrainingSpec.from_dict(spec.to_dict())
             execution_spec.job_id = str(attempt.attempt_id)
+            resume_from = self._resume_checkpoints.pop(str(attempt.attempt_id), None)
+            if resume_from:
+                checkpoint = execution_spec.checkpoint.to_dict()
+                checkpoint["resume_from"] = resume_from
+                execution_spec.checkpoint = CheckpointSpec.from_dict(checkpoint)
             session = engine.submit(execution_spec)
             self._execution_sessions[str(attempt.attempt_id)] = session.session_id
             return self._observe_training_session(run_id, attempt, session)
@@ -309,6 +390,7 @@ class TrainingControlPlane:
             metadata=_result_metadata(
                 {} if session.result is None else session.result.artifacts,
                 attempt.metadata,
+                session.events,
             ),
         )
 
@@ -335,6 +417,7 @@ class TrainingControlPlane:
             metadata=_result_metadata(
                 {} if session.result is None else session.result.artifacts,
                 attempt.metadata,
+                session.events,
             ),
         )
 
@@ -461,13 +544,30 @@ def _metadata_mapping(metadata: Mapping, key: str, run_id: str) -> Mapping:
 def _result_metadata(
     artifacts: Mapping[str, ArtifactRef],
     existing: Mapping,
+    events=(),
 ) -> Optional[Dict]:
-    if not artifacts:
+    if not artifacts and not events:
         return None
     metadata = dict(existing)
-    metadata[RESULT_ARTIFACTS_METADATA] = _canonical_json(
-        {name: reference.to_dict() for name, reference in artifacts.items()}
-    )
+    if artifacts:
+        metadata[RESULT_ARTIFACTS_METADATA] = _canonical_json(
+            {name: reference.to_dict() for name, reference in artifacts.items()}
+        )
+    if events:
+        metadata[TRAINING_EVENTS_METADATA] = _canonical_json(
+            [
+                {
+                    "kind": event.kind.value,
+                    "step": event.step,
+                    "total_steps": event.total_steps,
+                    "epoch": event.epoch,
+                    "loss": event.loss,
+                    "learning_rate": event.learning_rate,
+                    "timestamp": event.timestamp,
+                }
+                for event in events
+            ]
+        )
     return metadata
 
 

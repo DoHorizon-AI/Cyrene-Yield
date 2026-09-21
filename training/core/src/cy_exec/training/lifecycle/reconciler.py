@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
@@ -179,6 +179,36 @@ class ProductControlPlane:
         updated = (
             run.with_attempt(attempt)
             .with_step_status(action.step_id, StepStatus.RUNNING)
+            .with_observed_status(PlanStatus.RUNNING)
+        )
+        self._store.compare_and_set(updated, run.generation)
+        return attempt
+
+    def resume_attempt(self, run_id: str, step_id: str) -> Attempt:
+        """Rewind a stopped ProductRun and append one explicit manual Attempt.
+
+        Only terminal or awaiting-retry runs that still hold a complete
+        checkpoint are resumed by the owning Product; this method performs the
+        generic state transition and keeps all previous Attempts immutable.
+
+        仅供产品在确认 checkpoint 完整后调用；回退终态并追加一个新 Attempt，
+        历史 Attempt 保持不可变。
+        """
+
+        run = self._store.load_run(run_id)
+        if run.observed_status not in {
+            PlanStatus.FAILED,
+            PlanStatus.CANCELLED,
+            PlanStatus.AWAITING_RETRY,
+        }:
+            raise ValueError(f"ProductRun {run_id} is not resumable in status {run.observed_status.value}")
+        self._store.load_plan(run.plan_id).step(step_id)
+        attempt_number = AttemptNumber(len(run.attempts) + 1)
+        attempt = Attempt(AttemptId(f"{run.run_id}:{int(attempt_number)}"), run.run_id, attempt_number, step_id)
+        rewound = replace(run, desired_state=DesiredState.ACTIVE, observed_status=PlanStatus.RUNNING)
+        updated = (
+            rewound.with_attempt(attempt)
+            .with_step_status(step_id, StepStatus.RUNNING)
             .with_observed_status(PlanStatus.RUNNING)
         )
         self._store.compare_and_set(updated, run.generation)

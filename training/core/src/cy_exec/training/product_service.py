@@ -9,36 +9,68 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
+import re
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import httpx
 from cy_artifacts import LocalArtifactProvider
+from cyrene_preflight import HardwareFacts, PreflightSeverity, PreflightStatus
 
 from .contracts import DatasetRef, EngineKind, HyperparamSpec, LoRASpec, ModelRef, QuantizationSpec, TrainingSpec
+from .contracts.events import TrainingEvent, TrainingEventKind
 from .control_plane import REAL_TRAINING_STEP_ID, TrainingControlPlane
-from .lifecycle import PlanStatus
+from .lifecycle import Attempt, PlanStatus
+from .llama_factory_yaml import parse_llama_factory_yaml, render_llama_factory_yaml
 from .product_models import (
     ArtifactRef,
     CreateTrainingDraft,
+    GatewayRouteDraftReceipt,
     HandoffReceipt,
+    ImportLlamaFactoryYaml,
+    LlamaFactoryPrefill,
+    PreflightItem,
+    PreflightReport,
     PrepareTrainingDraft,
     ProducedArtifact,
     ProducedKind,
     ProductFailure,
     PublicTrainingSpec,
     ResourceRef,
+    ResumeTrainingRun,
     RunState,
+    SendTrainingResultToExchange,
     TrainingAttemptResource,
     TrainingDraft,
+    TrainingEventResource,
+    TrainingEventsPage,
+    TrainingParameters,
     TrainingResultResource,
+    TrainingRunPage,
     TrainingRunResource,
 )
 from .product_results import compose_result
 from .product_store import ProductStore
+
+_RESUMABLE_STATES = frozenset({PlanStatus.FAILED, PlanStatus.CANCELLED, PlanStatus.AWAITING_RETRY})
+_TERMINAL_RUN_STATES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
+_REDACTED = "[redacted]"
+_TOKEN_PATTERNS = (
+    re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._\-]{8,}"),
+    re.compile(r"\bhf_[A-Za-z0-9]{16,}\b"),
+    re.compile(r"\bcyk_[A-Za-z0-9_\-]{16,}\b"),
+    re.compile(r"\bsk-[A-Za-z0-9]{16,}\b"),
+)
+_MIN_FREE_DISK_BYTES = 1024**3
+_WARN_FREE_DISK_BYTES = 5 * 1024**3
+_MODEL_VERSION_ID = re.compile(r"^model-version://sha256/[0-9a-f]{64}$")
 
 
 def _now() -> datetime:
@@ -66,14 +98,21 @@ class YieldService:
         binding_id: str,
         reactor_url: str | None = None,
         reactor_bearer_token: str | None = None,
+        exchange_url: str | None = None,
+        exchange_bearer_token: str | None = None,
+        exchange_endpoint_id: str | None = None,
+        exchange_target_binding_id: str | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
         self.store, self.control, self.artifacts = store, control, artifacts
         self.state_directory, self.binding_id = state_directory, binding_id
         self.reactor_url = reactor_url.rstrip("/") if reactor_url else None
+        self.exchange_url = exchange_url.rstrip("/") if exchange_url else None
+        self.exchange_bearer_token = exchange_bearer_token
+        self.exchange_endpoint_id = exchange_endpoint_id
+        self.exchange_target_binding_id = exchange_target_binding_id
         self._http = http_client or httpx.Client(timeout=30, trust_env=False)
-        if reactor_bearer_token:
-            self._http.headers["Authorization"] = "Bearer " + reactor_bearer_token
+        self.reactor_bearer_token = reactor_bearer_token
         self._lock = RLock()
 
     def create_draft(self, command: CreateTrainingDraft, key: str | None = None) -> TrainingDraft:
@@ -85,6 +124,8 @@ class YieldService:
             state="DRAFT",
             name=command.name,
             dataset_version=command.dataset_version,
+            imported_parameters=command.imported_parameters,
+            workspace_id=command.workspace_id,
             created_at=_now(),
         )
         source = command.dataset_version
@@ -99,6 +140,73 @@ class YieldService:
     def list_drafts(self) -> list[TrainingDraft]:
         return [TrainingDraft.model_validate(item) for item in self.store.list("draft")]
 
+    def list_runs(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        workspace_id: str | None = None,
+    ) -> TrainingRunPage:
+        """Return a deterministic offset page without exposing executor state."""
+
+        if not 0 <= offset:
+            raise ValueError("YIELD_PAGINATION_INVALID: offset must be non-negative")
+        if not 1 <= limit <= 100:
+            raise ValueError("YIELD_PAGINATION_INVALID: limit must be between 1 and 100")
+        drafts = [draft for draft in self.list_drafts() if draft.training_run is not None]
+        if workspace_id is not None:
+            drafts = [draft for draft in drafts if draft.workspace_id == workspace_id]
+        drafts.sort(key=lambda draft: (draft.created_at, str(draft.id)), reverse=True)
+        total = len(drafts)
+        selected = drafts[offset : offset + limit]
+        items = [self.get_run(draft.training_run.id) for draft in selected if draft.training_run is not None]
+        next_offset = offset + len(items) if offset + len(items) < total else None
+        return TrainingRunPage(items=items, offset=offset, limit=limit, total=total, next_offset=next_offset)
+
+    def import_llama_factory_yaml(
+        self,
+        command: ImportLlamaFactoryYaml,
+        key: str | None = None,
+    ) -> TrainingDraft:
+        """Import only admitted LLaMA Factory fields into a DRAFT resource."""
+
+        prefill = parse_llama_factory_yaml(command.yaml_text)
+        draft_command = CreateTrainingDraft(
+            name=command.name,
+            dataset_version=command.dataset_version,
+            workspace_id=command.workspace_id,
+            imported_parameters=prefill,
+        )
+        return self.create_draft(draft_command, key)
+
+    def export_llama_factory_yaml(self, identifier: UUID) -> str:
+        """Export a draft's canonical parameters as LLaMA Factory YAML."""
+
+        return render_llama_factory_yaml(**self._yaml_values(self.get_draft(identifier)))
+
+    def export_result_llama_factory_yaml(self, identifier: UUID) -> str:
+        """Export the immutable result's source draft parameters as YAML."""
+
+        result = self.get_result(identifier)
+        draft = self._draft_for_run(result.training_run.id)
+        return render_llama_factory_yaml(**self._yaml_values(draft))
+
+    def _yaml_values(self, draft: TrainingDraft) -> dict[str, Any]:
+        if draft.configuration is not None:
+            return {
+                "model_name_or_path": draft.configuration.base_model.source.repository,
+                "dataset": draft.imported_parameters.dataset
+                if draft.imported_parameters and draft.imported_parameters.dataset
+                else draft.dataset_version.uri,
+                "parameters": draft.configuration.parameters,
+            }
+        imported = draft.imported_parameters
+        return {
+            "model_name_or_path": imported.model_name_or_path if imported else None,
+            "dataset": imported.dataset if imported and imported.dataset else draft.dataset_version.uri,
+            "parameters": imported.parameters if imported else TrainingParameters(),
+        }
+
     def prepare(self, identifier: UUID, command: PrepareTrainingDraft) -> TrainingDraft:
         with self._lock:
             draft = self.get_draft(identifier)
@@ -106,6 +214,8 @@ class YieldService:
                 raise ValueError("YIELD_DRAFT_ALREADY_STARTED: create another draft to change training intent")
             self.artifacts.verify(command.base_model.artifact.platform())
             self.artifacts.verify(draft.dataset_version.artifact.platform())
+            if draft.imported_parameters is not None and "parameters" not in command.model_fields_set:
+                command = command.model_copy(update={"parameters": draft.imported_parameters.parameters})
             draft.configuration, draft.state = command, "PREPARED"
             self.store.save("draft", str(identifier), _json(draft))
             return draft
@@ -149,7 +259,7 @@ class YieldService:
             output_dir=str(root / "result"),
             finetuning_type="lora",
             stage="sft",
-            lora=LoRASpec(r=params.lora_rank, lora_alpha=params.lora_alpha),
+            lora=LoRASpec(r=params.lora_rank, lora_alpha=params.lora_alpha, lora_dropout=params.lora_dropout),
             quantization=QuantizationSpec(use_4bit=False),
             hyperparams=HyperparamSpec(
                 num_train_epochs=params.epochs,
@@ -171,6 +281,7 @@ class YieldService:
                     "template": params.template,
                     "bf16": False,
                     "fp16": False,
+                    "lora_dropout": params.lora_dropout,
                 },
             },
         )
@@ -261,6 +372,282 @@ class YieldService:
             else None,
         )
 
+    def preflight(self, identifier: UUID) -> PreflightReport:
+        """Run the existing Product preflight and add local operational checks."""
+
+        self._draft_for_run(identifier)
+        run_id = "run-" + str(identifier)
+        result = self.control.preflight_result(run_id)
+        items = [
+            PreflightItem(
+                id=issue.code,
+                status=_preflight_item_status(issue.severity),
+                message=issue.message,
+                remediation=issue.remediation,
+            )
+            for issue in result.issues
+        ]
+        spec = self.control.spec(run_id)
+        lock = self.control.environment_lock(run_id)
+        accelerator_runtime = (lock.accelerator_runtime or "").lower()
+        items.extend(_filesystem_preflight(spec.output_dir))
+        items.append(
+            PreflightItem(
+                id="cuda-runtime",
+                status="PASS" if accelerator_runtime == "cuda" else "FAIL",
+                message=(
+                    "The resolved environment uses CUDA."
+                    if accelerator_runtime == "cuda"
+                    else "The resolved training environment is not CUDA."
+                ),
+                remediation="Select a CUDA training environment on an NVIDIA node.",
+            )
+        )
+        hardware = result.hardware
+        if hardware is None:
+            items.append(
+                PreflightItem(
+                    id="gpu-inventory",
+                    status="UNKNOWN",
+                    message="GPU inventory is not available from the Platform preflight.",
+                    remediation="Refresh node resource inventory before starting training.",
+                )
+            )
+        else:
+            accelerators = tuple(getattr(hardware, "accelerators", ()) or ())
+            total_vram = sum(int(getattr(item, "total_memory_bytes", 0) or 0) for item in accelerators)
+            items.append(
+                PreflightItem(
+                    id="gpu-inventory",
+                    status="PASS" if accelerators else "FAIL",
+                    message=(
+                        f"{len(accelerators)} GPU(s) and {total_vram} bytes of VRAM are reported."
+                        if accelerators
+                        else "No GPU was reported by the Platform inventory."
+                    ),
+                    remediation="Register an NVIDIA GPU with current VRAM facts before training."
+                    if not accelerators
+                    else None,
+                )
+            )
+        statuses = {item.status for item in items}
+        report_status: Literal["PASS", "WARN", "FAIL"] = (
+            "FAIL" if "FAIL" in statuses else "WARN" if statuses.intersection({"WARN", "UNKNOWN"}) else "PASS"
+        )
+        return PreflightReport(status=report_status, items=items, checked_at=_now())
+
+    def events(self, identifier: UUID, *, after_sequence: int = 0, limit: int = 5000) -> TrainingEventsPage:
+        """Harvest runtime events and return a durable ordered slice."""
+
+        if after_sequence < 0:
+            raise ValueError("YIELD_EVENT_SEQUENCE_INVALID: after_sequence must be non-negative")
+        self._draft_for_run(identifier)
+        self._harvest_events(identifier)
+        run = self.get_run(identifier)
+        records = self.store.list_events(str(identifier), after_sequence, limit)
+        values = [TrainingEventResource.model_validate(record) for record in records]
+        next_sequence = values[-1].sequence if values else after_sequence
+        return TrainingEventsPage(
+            events=values,
+            after_sequence=after_sequence,
+            next_sequence=next_sequence,
+            terminal=run.state in _TERMINAL_RUN_STATES,
+            state=run.state,
+        )
+
+    def _harvest_events(self, identifier: UUID) -> None:
+        """Persist only the new prefix of each in-process attempt event stream."""
+
+        self._draft_for_run(identifier)
+        run_id = "run-" + str(identifier)
+        run = self.control.load(run_id)
+        try:
+            spec = self.control.spec(run_id)
+        except (KeyError, RuntimeError, ValueError):
+            spec = None
+        private_paths = _private_paths(spec, self.state_directory)
+        for attempt in run.attempts:
+            observed = self.control.session_events(str(attempt.attempt_id))
+            persisted_snapshot = self.control.persisted_session_events(
+                run_id, str(attempt.attempt_id)
+            )
+            if len(persisted_snapshot) > len(observed):
+                observed = persisted_snapshot
+            persisted = self.store.event_count(str(identifier), str(attempt.attempt_id))
+            fresh = observed[persisted:]
+            if not fresh:
+                continue
+            documents = [
+                _event_document(identifier, attempt.step_id, attempt.attempt_id, event, private_paths)
+                for event in fresh
+            ]
+            self.store.append_events(str(identifier), str(attempt.attempt_id), documents)
+
+    def resume(
+        self,
+        identifier: UUID,
+        command: ResumeTrainingRun,
+        key: str | None = None,
+    ) -> TrainingRunResource:
+        """Stage a verified checkpoint and append one explicit Attempt."""
+
+        with self._lock:
+            draft = self._draft_for_run(identifier)
+            run_id = "run-" + str(identifier)
+            run = self.control.load(run_id)
+            if run.observed_status not in _RESUMABLE_STATES:
+                raise ValueError("YIELD_RESUME_NOT_ALLOWED: run is not stopped or awaiting retry")
+            checkpoints = self.control.checkpoint_artifacts(run_id)
+            selected = _select_checkpoint(checkpoints, command)
+            if selected is None:
+                raise ValueError("YIELD_RESUME_CHECKPOINT_MISSING: no complete checkpoint is attached to the run")
+            checkpoint_name, checkpoint = selected
+            digest = hashlib.sha256(
+                json_bytes({"run": str(identifier), "checkpoint": checkpoint.to_dict(), "name": checkpoint_name})
+            ).hexdigest()
+            receipt_key = key or f"resume:{identifier}:{checkpoint.digest}"
+            if self.store.recall_receipt(receipt_key, digest) is not None:
+                return self.get_run(identifier)
+            self.artifacts.verify(checkpoint)
+            target = self.state_directory / "training" / str(draft.id) / "resume" / checkpoint.digest.removeprefix("sha256:")
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            self.artifacts.stage(checkpoint, target)
+            if not target.exists() or not any(target.rglob("*")):
+                raise ValueError("YIELD_RESUME_CHECKPOINT_INCOMPLETE: staged checkpoint is empty")
+            self.control.resume(run_id, checkpoint_path=str(target))
+            self.store.save_receipt(
+                receipt_key,
+                digest,
+                {"runId": str(identifier), "checkpointDigest": checkpoint.digest},
+            )
+        return self.get_run(identifier)
+
+    def send_to_exchange(
+        self,
+        identifier: UUID,
+        command: SendTrainingResultToExchange,
+        key: str | None = None,
+    ) -> GatewayRouteDraftReceipt:
+        """Create, but never confirm, an Exchange Route Draft for a result."""
+
+        result = self.get_result(identifier)
+        if self.exchange_url is None:
+            raise ValueError("YIELD_EXCHANGE_NOT_CONNECTED: configure the Exchange Product URL")
+        endpoint_id = command.gateway_endpoint_id or self.exchange_endpoint_id
+        target_binding_id = command.target_binding_id or self.exchange_target_binding_id
+        if not endpoint_id or not target_binding_id:
+            raise ValueError("YIELD_EXCHANGE_NOT_CONFIGURED: configure the gateway endpoint and target binding")
+        source_endpoint, deployment = self._inspect_reactor_endpoint(command.endpoint_url, result)
+        target_model = command.target_model or source_endpoint["model"]
+        if target_model != source_endpoint["model"]:
+            raise ValueError("YIELD_EXCHANGE_SOURCE_MISMATCH: target model differs from Reactor Endpoint")
+        model_pattern = command.model_pattern or command.model_alias
+        source = {
+            "product": "reactor",
+            "resourceUri": command.endpoint_url,
+            "resourceVersion": source_endpoint["resourceVersion"],
+            "artifactDigest": deployment["modelArtifact"]["digest"],
+        }
+        source["modelVersionId"] = deployment["modelVersion"]["id"]
+        payload = {
+            "endpointId": str(endpoint_id),
+            "modelPattern": model_pattern,
+            "targetBindingId": target_binding_id,
+            "targetModel": target_model,
+            "priority": command.priority,
+            "source": source,
+        }
+        digest = hashlib.sha256(json_bytes(payload)).hexdigest()
+        receipt_key = key or f"send-to-exchange:{identifier}"
+        saved = self.store.recall_receipt(receipt_key, digest)
+        if saved is not None:
+            return GatewayRouteDraftReceipt.model_validate(saved)
+        headers = {"Idempotency-Key": receipt_key}
+        if self.exchange_bearer_token:
+            headers["Authorization"] = "Bearer " + self.exchange_bearer_token
+        response = self._http.post(
+            self.exchange_url + "/api/v1/gateway-route-drafts",
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+        document = response.json()
+        route_id = UUID(str(document["id"]))
+        receipt = GatewayRouteDraftReceipt(
+            route_id=route_id,
+            draft_url=self.exchange_url + "/api/v1/gateway-route-drafts/" + str(route_id),
+        )
+        self.store.save_receipt(receipt_key, digest, _json(receipt))
+        return receipt
+
+    def _inspect_reactor_endpoint(
+        self, endpoint_url: str, result: TrainingResultResource
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Read the Reactor source before sending its versioned reference to Exchange."""
+
+        if self.reactor_url is None:
+            raise ValueError("YIELD_REACTOR_NOT_CONNECTED: configure the Reactor Product URL")
+        source = urlsplit(endpoint_url)
+        reactor = urlsplit(self.reactor_url)
+        endpoint_match = re.fullmatch(r"/api/v1/endpoints/([0-9a-f-]{36})", source.path)
+        if (
+            endpoint_match is None
+            or source.scheme != reactor.scheme
+            or source.netloc != reactor.netloc
+            or source.query
+            or source.fragment
+            or reactor.path not in {"", "/"}
+        ):
+            raise ValueError("YIELD_EXCHANGE_SOURCE_INVALID: endpoint_url must be a Reactor Endpoint URI")
+        headers = (
+            {"Authorization": "Bearer " + self.reactor_bearer_token}
+            if self.reactor_bearer_token
+            else {}
+        )
+        endpoint_response = self._http.get(endpoint_url, headers=headers)
+        endpoint_response.raise_for_status()
+        endpoint = endpoint_response.json()
+        if (
+            not isinstance(endpoint, dict)
+            or str(endpoint.get("id")) != endpoint_match.group(1)
+            or endpoint.get("state") != "READY"
+            or endpoint.get("protocol") != "openai.chat.v1"
+            or not isinstance(endpoint.get("model"), str)
+            or not isinstance(endpoint.get("resourceVersion"), int)
+            or isinstance(endpoint.get("resourceVersion"), bool)
+        ):
+            raise ValueError("YIELD_EXCHANGE_SOURCE_INVALID: Reactor Endpoint is not ready")
+        deployment_id = endpoint.get("deploymentId")
+        try:
+            deployment_uuid = UUID(str(deployment_id))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("YIELD_EXCHANGE_SOURCE_INVALID: Reactor deployment identity is invalid") from exc
+        deployment_response = self._http.get(
+            self.reactor_url + "/api/v1/deployments/" + str(deployment_uuid),
+            headers=headers,
+        )
+        deployment_response.raise_for_status()
+        deployment = deployment_response.json()
+        model_artifact = deployment.get("modelArtifact") if isinstance(deployment, dict) else None
+        model_version = deployment.get("modelVersion") if isinstance(deployment, dict) else None
+        result_model_version = result.model_version.get("id")
+        if (
+            not isinstance(deployment, dict)
+            or not isinstance(model_artifact, dict)
+            or not isinstance(model_artifact.get("digest"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", model_artifact["digest"])
+            or not isinstance(model_version, dict)
+            or not isinstance(model_version.get("id"), str)
+            or not _MODEL_VERSION_ID.fullmatch(model_version["id"])
+            or model_version["id"] != result_model_version
+        ):
+            raise ValueError("YIELD_EXCHANGE_SOURCE_MISMATCH: Reactor deployment is not this training result")
+        return endpoint, deployment
+
     def _result(self, draft: TrainingDraft, artifacts: dict[str, Any]) -> TrainingResultResource:
         assert draft.training_run is not None and draft.configuration is not None
         identifier = uuid5(NAMESPACE_URL, draft.training_run.uri + "/result")
@@ -339,6 +726,7 @@ class YieldService:
             if draft.training_run is None:
                 continue
             self.control.reconcile_once("run-" + str(draft.training_run.id))
+            self._harvest_events(draft.training_run.id)
             self.get_run(draft.training_run.id)
 
     def send_to_reactor(self, identifier: UUID) -> HandoffReceipt:
@@ -347,7 +735,14 @@ class YieldService:
             raise ValueError("YIELD_REACTOR_NOT_CONNECTED: configure the Reactor Product URL")
         response = self._http.post(
             self.reactor_url + "/api/v1/deployment-drafts",
-            headers={"Idempotency-Key": "yield-result:" + str(identifier)},
+            headers={
+                "Idempotency-Key": "yield-result:" + str(identifier),
+                **(
+                    {"Authorization": "Bearer " + self.reactor_bearer_token}
+                    if self.reactor_bearer_token
+                    else {}
+                ),
+            },
             json={"sourceRef": _json(result.resource_ref), "modelVersion": result.model_version},
         )
         response.raise_for_status()
@@ -365,3 +760,160 @@ class YieldService:
 def _failure_code(detail: str | None) -> str:
     code = (detail or "").split(":", 1)[0]
     return code if code.startswith("YIELD_") and code.replace("_", "").isalnum() else "YIELD_TRAINING_PHASE_FAILED"
+
+
+def json_bytes(value: Any) -> bytes:
+    """Encode an idempotency payload deterministically."""
+
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+
+
+def _preflight_item_status(severity: PreflightSeverity) -> Literal["PASS", "WARN", "FAIL", "UNKNOWN"]:
+    if severity is PreflightSeverity.BLOCKED:
+        return "FAIL"
+    if severity is PreflightSeverity.UNKNOWN:
+        return "UNKNOWN"
+    return "WARN"
+
+
+def _filesystem_preflight(output_dir: str) -> list[PreflightItem]:
+    """Check the output parent without returning its private path."""
+
+    target = Path(output_dir)
+    parent = target if target.exists() else target.parent
+    while not parent.exists() and parent != parent.parent:
+        parent = parent.parent
+    items: list[PreflightItem] = []
+    writable = parent.exists() and os.access(parent, os.W_OK)
+    items.append(
+        PreflightItem(
+            id="output-write-permission",
+            status="PASS" if writable else "FAIL",
+            message="The training output location is writable." if writable else "The training output location is not writable.",
+            remediation="Choose a writable output volume for the training result." if not writable else None,
+        )
+    )
+    if parent.exists():
+        free = shutil.disk_usage(parent).free
+        disk_status: Literal["PASS", "WARN", "FAIL"] = (
+            "FAIL" if free < _MIN_FREE_DISK_BYTES else "WARN" if free < _WARN_FREE_DISK_BYTES else "PASS"
+        )
+        items.append(
+            PreflightItem(
+                id="disk-space",
+                status=disk_status,
+                message="The output volume has sufficient free space."
+                if disk_status == "PASS"
+                else "The output volume has limited free space.",
+                remediation="Free at least 1 GiB on the output volume before training."
+                if disk_status != "PASS"
+                else None,
+            )
+        )
+    else:
+        items.append(
+            PreflightItem(
+                id="disk-space",
+                status="UNKNOWN",
+                message="The output volume could not be inspected.",
+                remediation="Create or mount the configured output volume before training.",
+            )
+        )
+    return items
+
+
+def _private_paths(spec: TrainingSpec | None, state_directory: Path) -> tuple[str, ...]:
+    if spec is None:
+        return (str(state_directory),)
+    return tuple(
+        path
+        for path in (
+            str(state_directory),
+            spec.model.path,
+            spec.dataset.path,
+            spec.output_dir,
+            spec.checkpoint.output_dir,
+        )
+        if path
+    )
+
+
+def _event_document(
+    run_id: UUID,
+    phase: str,
+    attempt_id: Any,
+    event: TrainingEvent,
+    private_paths: tuple[str, ...],
+) -> dict[str, Any]:
+    payload = _redact_value(event.payload, private_paths)
+    checkpoint = None
+    if event.kind is TrainingEventKind.CHECKPOINT:
+        checkpoint = {
+            key: payload[key]
+            for key in ("name", "step", "epoch", "digest", "size_bytes")
+            if key in payload
+        }
+        if not checkpoint and event.message:
+            checkpoint = {"name": Path(event.message).name}
+    return _json(
+        TrainingEventResource(
+            sequence=1,
+            training_run_id=run_id,
+            attempt_id=str(attempt_id),
+            phase=phase,
+            kind=event.kind.value,
+            message=_redact_text(event.message, private_paths),
+            step=event.step,
+            total_steps=event.total_steps,
+            epoch=event.epoch,
+            loss=event.loss,
+            learning_rate=event.learning_rate,
+            throughput=_number(payload.get("throughput")),
+            eta_seconds=_number(payload.get("eta_seconds") or payload.get("eta")),
+            checkpoint=checkpoint,
+            payload=payload if isinstance(payload, dict) else {},
+            timestamp=event.timestamp,
+        )
+    )
+
+
+def _redact_value(value: Any, private_paths: tuple[str, ...]) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _redact_value(item, private_paths) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_value(item, private_paths) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_value(item, private_paths) for item in value]
+    return _redact_text(value, private_paths) if isinstance(value, str) else value
+
+
+def _redact_text(value: str, private_paths: tuple[str, ...]) -> str:
+    redacted = value
+    for private_path in sorted((item for item in private_paths if item), key=len, reverse=True):
+        redacted = redacted.replace(private_path, "<private>")
+    for pattern in _TOKEN_PATTERNS:
+        redacted = pattern.sub(lambda match: match.group(1) + " " + _REDACTED if match.lastindex else _REDACTED, redacted)
+    return redacted
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _select_checkpoint(
+    checkpoints: dict[str, Any], command: ResumeTrainingRun
+) -> tuple[str, Any] | None:
+    if command.checkpoint_artifact is not None:
+        for name, reference in checkpoints.items():
+            if reference.digest == command.checkpoint_artifact.digest:
+                return name, reference
+        raise ValueError("YIELD_RESUME_CHECKPOINT_NOT_ATTACHED: checkpoint is not an output of this run")
+    if command.checkpoint_name:
+        reference = checkpoints.get(command.checkpoint_name)
+        return (command.checkpoint_name, reference) if reference is not None else None
+    return next(reversed(checkpoints.items()), None) if checkpoints else None

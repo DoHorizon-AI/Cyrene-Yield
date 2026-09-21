@@ -13,7 +13,7 @@ import json
 import sqlite3
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, List
 
 
 class ProductStore:
@@ -27,6 +27,14 @@ class ProductStore:
             self._connection.executescript(
                 "CREATE TABLE IF NOT EXISTS resources(kind TEXT, id TEXT, document TEXT, PRIMARY KEY(kind,id));"
                 "CREATE TABLE IF NOT EXISTS receipts(key TEXT PRIMARY KEY, digest TEXT, id TEXT);"
+                "CREATE TABLE IF NOT EXISTS action_receipts("
+                "key TEXT PRIMARY KEY, digest TEXT NOT NULL, document TEXT NOT NULL);"
+                "CREATE TABLE IF NOT EXISTS training_events("
+                "run_id TEXT NOT NULL, attempt_id TEXT NOT NULL, event_index INTEGER NOT NULL,"
+                "sequence INTEGER NOT NULL, document TEXT NOT NULL,"
+                "PRIMARY KEY(run_id, attempt_id, event_index));"
+                "CREATE INDEX IF NOT EXISTS ix_training_events_run_sequence"
+                " ON training_events(run_id, sequence);"
             )
 
     def get(self, kind: str, resource_id: str) -> dict[str, Any]:
@@ -79,6 +87,92 @@ class ProductStore:
                 (document["id"], json.dumps(document, sort_keys=True)),
             )
             return self.get("result", document["id"])
+
+    def append_events(self, run_id: str, attempt_id: str, documents: List[dict[str, Any]]) -> List[dict[str, Any]]:
+        """Append one attempt's new events with a monotonic per-run sequence.
+
+        Persisted event count is the durable harvest offset, so re-reading a
+        Kernel log after a controller restart cannot duplicate sequences.
+
+        以已持久化条数作为采集偏移；控制服务重启后重读日志不会产生重复序号。
+        """
+
+        if not documents:
+            return []
+        appended: List[dict[str, Any]] = []
+        with self._lock, self._connection:
+            sequence = int(
+                self._connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) FROM training_events WHERE run_id=?", (run_id,)
+                ).fetchone()[0]
+            )
+            event_index = int(
+                self._connection.execute(
+                    "SELECT COUNT(*) FROM training_events WHERE run_id=? AND attempt_id=?",
+                    (run_id, attempt_id),
+                ).fetchone()[0]
+            )
+            for offset, document in enumerate(documents):
+                sequence += 1
+                index = event_index + offset
+                record = {**document, "sequence": sequence, "eventIndex": index}
+                self._connection.execute(
+                    "INSERT OR REPLACE INTO training_events(run_id, attempt_id, event_index, sequence, document)"
+                    " VALUES(?,?,?,?,?)",
+                    (run_id, attempt_id, index, sequence, json.dumps(record, sort_keys=True)),
+                )
+                appended.append(record)
+        return appended
+
+    def event_count(self, run_id: str, attempt_id: str) -> int:
+        """Return how many events are already durable for one attempt."""
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT COUNT(*) FROM training_events WHERE run_id=? AND attempt_id=?",
+                (run_id, attempt_id),
+            ).fetchone()
+        return int(row[0])
+
+    def list_events(self, run_id: str, after_sequence: int = 0, limit: int = 5000) -> List[dict[str, Any]]:
+        """Read persisted events in sequence order. | 按序号读取已持久化事件。"""
+
+        bounded = max(1, min(int(limit), 20000))
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT document FROM training_events WHERE run_id=? AND sequence>?"
+                " ORDER BY sequence ASC LIMIT ?",
+                (run_id, int(after_sequence), bounded),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def recall_receipt(self, key: str, digest: str) -> dict[str, Any] | None:
+        """Resolve one durable action receipt or reject conflicting reuse."""
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT digest, document FROM action_receipts WHERE key=?", (key,)
+            ).fetchone()
+        if row is None:
+            return None
+        if row[0] != digest:
+            raise ValueError("YIELD_IDEMPOTENCY_CONFLICT: key already identifies another action")
+        return json.loads(row[1])
+
+    def save_receipt(self, key: str, digest: str, document: dict[str, Any]) -> dict[str, Any]:
+        """Persist an action receipt for later idempotent replay."""
+
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT OR IGNORE INTO action_receipts(key, digest, document) VALUES(?,?,?)",
+                (key, digest, json.dumps(document, sort_keys=True)),
+            )
+            row = self._connection.execute(
+                "SELECT digest, document FROM action_receipts WHERE key=?", (key,)
+            ).fetchone()
+        if row[0] != digest:
+            raise ValueError("YIELD_IDEMPOTENCY_CONFLICT: key already identifies another action")
+        return json.loads(row[1])
 
     def close(self) -> None:
         self._connection.close()

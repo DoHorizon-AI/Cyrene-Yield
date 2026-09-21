@@ -144,12 +144,19 @@ def main() -> None:
     parser.add_argument("--allow-wsl-shared-device", action="store_true")
     parser.add_argument("--reactor-url")
     parser.add_argument("--reactor-token-env", help="Name of the Reactor Product credential variable")
+    parser.add_argument("--exchange-url")
+    parser.add_argument("--exchange-token-env", help="Name of the Exchange Product credential variable")
+    parser.add_argument("--exchange-endpoint-id")
+    parser.add_argument("--exchange-target-binding-id")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8092)
     args = parser.parse_args()
     token = os.environ.get(args.reactor_token_env) if args.reactor_token_env else None
     if args.reactor_token_env and not token:
         parser.error("The configured Reactor credential variable is empty")
+    exchange_token = os.environ.get(args.exchange_token_env) if args.exchange_token_env else None
+    if args.exchange_token_env and not exchange_token:
+        parser.error("The configured Exchange credential variable is empty")
     kernel: KernelTrainingConfiguration | None = None
     if args.runtime_config or args.trainer_runtime_config:
         if not args.runtime_config or not args.trainer_runtime_config:
@@ -197,6 +204,10 @@ def main() -> None:
         kernel=kernel,
         reactor_url=args.reactor_url,
         reactor_bearer_token=token,
+        exchange_url=args.exchange_url,
+        exchange_bearer_token=exchange_token,
+        exchange_endpoint_id=args.exchange_endpoint_id,
+        exchange_target_binding_id=args.exchange_target_binding_id,
     )
     uvicorn.run(app, host=args.host, port=args.port)
 
