@@ -252,7 +252,7 @@ class ProductStore:
                 (str(run_id), state, ts),
             )
 
-    def _terminal_run_ids_before(self, cutoff: datetime) -> list[str]:
+    def _terminal_run_ids_before(self, cutoff: datetime) -> List[str]:
         terminal_ids: set[str] = set()
         cutoff_iso = cutoff.isoformat()
         with self._lock:
