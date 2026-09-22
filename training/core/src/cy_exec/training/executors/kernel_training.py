@@ -352,6 +352,50 @@ class KernelTrainingExecutor:
             handle.extra["logOffset"] = stream.tell()
             return [line.rstrip("\n") for line in lines]
 
+    def read_new_diagnostics(self, handle: ProcessHandle) -> list[dict[str, Any]]:
+        """Return the new NDJSON diagnostic records the worker wrote.
+
+        Only complete lines are consumed: a half-written tail stays buffered so
+        the next poll picks it up instead of dropping the record.
+
+        只消费完整行，半行留在下次采集，避免截断记录。
+        """
+
+        path = (
+            self.configuration.installations
+            / str(handle.extra.get("worker_id", ""))
+            / "diagnostics.ndjson"
+        )
+        if not path.exists():
+            return []
+        offset = int(handle.extra.get("diagnosticsOffset", 0))
+        with path.open("r", encoding="utf-8", errors="replace") as stream:
+            stream.seek(offset)
+            chunk = stream.read(1024 * 1024)
+        boundary = chunk.rfind("\n")
+        if boundary == -1:
+            return []
+        handle.extra["diagnosticsOffset"] = offset + boundary + 1
+        records: list[dict[str, Any]] = []
+        for line in chunk[: boundary + 1].splitlines():
+            try:
+                document = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(document, dict):
+                records.append(document)
+        return records
+
+    def diagnostics_degraded(self, handle: ProcessHandle) -> bool:
+        """True when the worker could not keep every diagnostic line."""
+
+        marker = (
+            self.configuration.installations
+            / str(handle.extra.get("worker_id", ""))
+            / "diagnostics.degraded"
+        )
+        return marker.exists()
+
     def wait(self, handle: ProcessHandle, timeout: float | None = None) -> int | None:
         deadline = None if timeout is None else time.monotonic() + timeout
         while deadline is None or time.monotonic() < deadline:

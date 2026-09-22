@@ -29,6 +29,7 @@ from .control_plane import TrainingControlPlane
 from .executors.kernel_training import KernelTrainingConfiguration, KernelTrainingExecutor
 from .product_models import (
     CreateTrainingDraft,
+    DiagnosticsPage,
     GatewayRouteDraftReceipt,
     HandoffReceipt,
     ImportLlamaFactoryYaml,
@@ -372,6 +373,18 @@ def create_app(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
         )
+
+    @app.get(
+        "/api/v1/training-runs/{run_id}/diagnostics",
+        response_model=DiagnosticsPage,
+        response_model_exclude_none=True,
+    )
+    def get_diagnostics(
+        run_id: UUID,
+        after_sequence: int = Query(default=0, ge=0),
+        limit: int = Query(default=200, ge=1, le=500),
+    ) -> DiagnosticsPage:
+        return service.diagnostics(run_id, after_sequence=after_sequence, limit=limit)
 
     @app.get(
         "/api/v1/training-runs/{run_id}/attempts",

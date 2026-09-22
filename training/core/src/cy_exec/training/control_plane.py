@@ -178,6 +178,18 @@ class TrainingControlPlane:
         session = self._runtime.get(str(attempt_id))
         return tuple(session.events) if session is not None else ()
 
+    def session_diagnostics(self, attempt_id: str):
+        """Return the in-process diagnostic records observed for one Attempt."""
+
+        session = self._runtime.get(str(attempt_id))
+        return tuple(session.diagnostics) if session is not None else ()
+
+    def session_diagnostics_degraded(self, attempt_id: str) -> bool:
+        """True when the attempt's raw output could not be kept in full."""
+
+        session = self._runtime.get(str(attempt_id))
+        return bool(session.diagnostics_degraded) if session is not None else False
+
     def persisted_session_events(self, run_id: str, attempt_id: str):
         """Return the redacted event snapshot saved with an Attempt."""
 

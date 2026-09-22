@@ -64,6 +64,8 @@ class TrainingSession:
     handle: ProcessHandle | None = None
     result: TrainingResult | None = None
     events: list[TrainingEvent] = field(default_factory=list)
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    diagnostics_degraded: bool = False
     error: str = ""
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -193,6 +195,14 @@ class TrainingRuntime:
                 if attempt is not None:
                     if attempt.events is not session.events:
                         attempt.events.append(event)
+        # Diagnostics ride alongside events: the raw stream is a separate copy
+        # and never replaces the business event stream.
+        reader = getattr(executor, "read_new_diagnostics", None)
+        if reader is not None:
+            session.diagnostics.extend(reader(session.handle))
+        degraded = getattr(executor, "diagnostics_degraded", None)
+        if degraded is not None and degraded(session.handle):
+            session.diagnostics_degraded = True
         if session.handle.extra.get("lost"):
             self._mark_attempt_lost(session, "worker/operation lost")
             return session

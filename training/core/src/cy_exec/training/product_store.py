@@ -56,6 +56,12 @@ class ProductStore:
                 "run_id TEXT PRIMARY KEY, state TEXT NOT NULL, ended_at TEXT NOT NULL);"
                 "CREATE INDEX IF NOT EXISTS ix_run_terminals_ended_at"
                 " ON run_terminals(ended_at);"
+                "CREATE TABLE IF NOT EXISTS training_diagnostics("
+                "run_id TEXT NOT NULL, attempt_id TEXT NOT NULL, record_index INTEGER NOT NULL,"
+                "sequence INTEGER NOT NULL, document TEXT NOT NULL,"
+                "PRIMARY KEY(run_id, attempt_id, record_index));"
+                "CREATE INDEX IF NOT EXISTS ix_training_diagnostics_run_sequence"
+                " ON training_diagnostics(run_id, sequence);"
             )
 
     def get(self, kind: str, resource_id: str) -> dict[str, Any]:
@@ -160,6 +166,92 @@ class ProductStore:
                 (run_id, attempt_id),
             ).fetchone()
         return int(row[0])
+
+    def append_diagnostics(
+        self, run_id: str, attempt_id: str, documents: List[dict[str, Any]]
+    ) -> List[dict[str, Any]]:
+        """Append one attempt's new diagnostic records with a per-run sequence.
+
+        Mirrors append_events so both streams page the same way and a controller
+        restart cannot duplicate sequences.
+
+        与事件一致地按 Run 分配单调序号，重启后重读不会产生重复序号。
+        """
+
+        if not documents:
+            return []
+        appended: List[dict[str, Any]] = []
+        with self._lock, self._connection:
+            sequence = int(
+                self._connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) FROM training_diagnostics WHERE run_id=?",
+                    (run_id,),
+                ).fetchone()[0]
+            )
+            record_index = int(
+                self._connection.execute(
+                    "SELECT COUNT(*) FROM training_diagnostics WHERE run_id=? AND attempt_id=?",
+                    (run_id, attempt_id),
+                ).fetchone()[0]
+            )
+            for offset, document in enumerate(documents):
+                sequence += 1
+                index = record_index + offset
+                record = {**document, "sequence": sequence}
+                self._connection.execute(
+                    "INSERT OR REPLACE INTO training_diagnostics"
+                    "(run_id, attempt_id, record_index, sequence, document) VALUES(?,?,?,?,?)",
+                    (run_id, attempt_id, index, sequence, json.dumps(record, sort_keys=True)),
+                )
+                appended.append(record)
+        return appended
+
+    def diagnostics_count(self, run_id: str, attempt_id: str) -> int:
+        """Return how many diagnostic records are already durable for one attempt."""
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT COUNT(*) FROM training_diagnostics WHERE run_id=? AND attempt_id=?",
+                (run_id, attempt_id),
+            ).fetchone()
+        return int(row[0])
+
+    def diagnostics_degraded(self, run_id: str) -> bool:
+        """True when a persisted record shows the output budget was exhausted."""
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT 1 FROM training_diagnostics WHERE run_id=? AND document LIKE '%BUDGET_EXCEEDED%'",
+                (run_id,),
+            ).fetchone()
+        return row is not None
+
+    def purge_expired_diagnostics(self) -> int:
+        """Drop persisted diagnostics for terminal runs past the retention window."""
+
+        cutoff = datetime.now(UTC) - timedelta(days=self.log_retention_days)
+        purged = 0
+        with self._lock, self._connection:
+            for run_id in self._terminal_run_ids_before(cutoff):
+                cursor = self._connection.execute(
+                    "DELETE FROM training_diagnostics WHERE run_id=?", (run_id,)
+                )
+                purged += int(cursor.rowcount or 0)
+        return purged
+
+    def list_diagnostics(
+        self, run_id: str, after_sequence: int = 0, limit: int = 200
+    ) -> List[dict[str, Any]]:
+        """Read persisted diagnostics in sequence order. | 按序号读取已持久化诊断。"""
+
+        bounded = max(1, min(int(limit), 500))
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT document FROM training_diagnostics WHERE run_id=? AND sequence>?"
+                " ORDER BY sequence ASC LIMIT ?",
+                (run_id, int(after_sequence), bounded),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
 
     def list_events(self, run_id: str, after_sequence: int = 0, limit: int = 5000) -> List[dict[str, Any]]:
         """Read persisted events in sequence order. | 按序号读取已持久化事件。"""

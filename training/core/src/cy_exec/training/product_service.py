@@ -33,6 +33,8 @@ from .model_registry import ModelRegistryPort
 from .product_models import (
     ArtifactRef,
     CreateTrainingDraft,
+    DiagnosticRecord,
+    DiagnosticsPage,
     GatewayRouteDraftReceipt,
     HandoffReceipt,
     ImportLlamaFactoryYaml,
@@ -62,6 +64,10 @@ from .product_store import ProductStore
 
 _RESUMABLE_STATES = frozenset({PlanStatus.FAILED, PlanStatus.CANCELLED, PlanStatus.AWAITING_RETRY})
 _TERMINAL_RUN_STATES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
+# One diagnostics page is capped by both record count and serialized size, so a
+# console poll can never pull an unbounded payload.
+DIAGNOSTICS_PAGE_LIMIT = 500
+DIAGNOSTICS_PAGE_MAX_BYTES = 1024 * 1024
 _REDACTED = "[redacted]"
 _TOKEN_PATTERNS = (
     re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._\-]{8,}"),
@@ -457,6 +463,59 @@ class YieldService:
             terminal=run.state in _TERMINAL_RUN_STATES,
             state=run.state,
         )
+
+    def diagnostics(
+        self, identifier: UUID, *, after_sequence: int = 0, limit: int = 200
+    ) -> DiagnosticsPage:
+        """Harvest trainer output and return a durable, redacted page."""
+
+        if after_sequence < 0:
+            raise ValueError("YIELD_DIAGNOSTICS_SEQUENCE_INVALID: after_sequence must be non-negative")
+        self._draft_for_run(identifier)
+        self._harvest_diagnostics(identifier)
+        run = self.get_run(identifier)
+        records = self.store.list_diagnostics(str(identifier), after_sequence, DIAGNOSTICS_PAGE_LIMIT)
+        items = [DiagnosticRecord.model_validate(record) for record in records]
+        items, dropped = _bounded_diagnostics(items)
+        next_sequence = items[-1].sequence if items else after_sequence
+        return DiagnosticsPage(
+            resource_id=str(identifier),
+            items=items,
+            next_sequence=next_sequence,
+            terminal=run.state in _TERMINAL_RUN_STATES,
+            diagnostics_degraded=(
+                self._diagnostics_degraded(identifier, run) or dropped
+            ),
+        )
+
+    def _harvest_diagnostics(self, identifier: UUID) -> None:
+        """Persist only the new prefix of each attempt's raw output."""
+
+        run_id = "run-" + str(identifier)
+        run = self.control.load(run_id)
+        try:
+            spec = self.control.spec(run_id)
+        except (KeyError, RuntimeError, ValueError):
+            spec = None
+        private_paths = _private_paths(spec, self.state_directory)
+        for attempt in run.attempts:
+            observed = self.control.session_diagnostics(str(attempt.attempt_id))
+            persisted = self.store.diagnostics_count(str(identifier), str(attempt.attempt_id))
+            fresh = observed[persisted:]
+            if not fresh:
+                continue
+            documents = [
+                _diagnostic_document(identifier, attempt, record, private_paths) for record in fresh
+            ]
+            self.store.append_diagnostics(str(identifier), str(attempt.attempt_id), documents)
+
+    def _diagnostics_degraded(self, identifier: UUID, run: Any) -> bool:
+        """True when any attempt lost output or the budget was exhausted."""
+
+        for attempt in run.attempts:
+            if self.control.session_diagnostics_degraded(str(attempt.attempt_id)):
+                return True
+        return self.store.diagnostics_degraded(str(identifier))
 
     def _harvest_events(self, identifier: UUID) -> None:
         """Persist only the new prefix of each in-process attempt event stream."""
@@ -869,6 +928,46 @@ def _private_paths(spec: TrainingSpec | None, state_directory: Path) -> tuple[st
         )
         if path
     )
+
+
+def _bounded_diagnostics(items: list[DiagnosticRecord]) -> tuple[list[DiagnosticRecord], bool]:
+    """Trim a page to the serialized byte budget; report whether it was trimmed."""
+
+    if not items:
+        return items, False
+    kept = list(items)
+    while kept and len(json.dumps([item.model_dump(by_alias=True) for item in kept])) > DIAGNOSTICS_PAGE_MAX_BYTES:
+        kept.pop()
+    return kept, len(kept) < len(items)
+
+
+def _diagnostic_document(
+    run_id: UUID,
+    attempt: Any,
+    record: dict[str, Any],
+    private_paths: tuple[str, ...],
+) -> dict[str, Any]:
+    """Map one raw worker record onto the public DiagnosticRecord shape."""
+
+    message = _redact_text(str(record.get("message", ""))[:8192], private_paths)
+    attempt_id = str(attempt.attempt_id)
+    metadata = attempt.metadata if isinstance(getattr(attempt, "metadata", None), dict) else {}
+    operation_id = metadata.get("operationId") or metadata.get("operation_id")
+    resource_ids = metadata.get("resourceIds") or metadata.get("resource_ids")
+    return {
+        "sequence": record.get("sequence", 0),
+        "timestamp": str(record.get("timestamp") or ""),
+        "level": str(record.get("level") or "info"),
+        "source": "trainer",
+        "stream": str(record.get("stream") or "combined"),
+        "code": record.get("code"),
+        "message": message,
+        "request_id": record.get("requestId"),
+        "operation_id": str(operation_id) if operation_id else None,
+        "resource_id": str(resource_ids[0]) if resource_ids else None,
+        "attempt_id": attempt_id,
+        "truncated": bool(record.get("truncated", False)),
+    }
 
 
 def _event_document(

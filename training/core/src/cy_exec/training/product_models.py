@@ -257,6 +257,43 @@ class TrainingEventsPage(ContractModel):
     state: RunState
 
 
+DiagnosticSource = Literal["product", "trainer", "runtime", "platform"]
+DiagnosticStream = Literal["stdout", "stderr", "combined"]
+DiagnosticLevel = Literal["debug", "info", "warn", "error"]
+
+
+class DiagnosticRecord(ContractModel):
+    """One redacted diagnostic line a console may show verbatim.
+
+    Raw trainer output never reaches the browser: the message is redacted on the
+    way in, and the page carries no path, credential, or environment content.
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+    sequence: int = Field(ge=1)
+    timestamp: str
+    level: DiagnosticLevel = "info"
+    source: DiagnosticSource = "trainer"
+    stream: DiagnosticStream = "combined"
+    code: str | None = Field(default=None, max_length=200)
+    message: str = Field(default="", max_length=8192)
+    request_id: str | None = Field(default=None, max_length=200)
+    operation_id: str | None = Field(default=None, max_length=200)
+    resource_id: str | None = Field(default=None, max_length=200)
+    attempt_id: str | None = Field(default=None, max_length=200)
+    truncated: bool = False
+
+
+class DiagnosticsPage(ContractModel):
+    """One page of diagnostics for a single resource. | 单个资源的诊断分页。"""
+
+    resource_id: str
+    items: list[DiagnosticRecord] = Field(default_factory=list)
+    next_sequence: int = Field(ge=0)
+    terminal: bool = False
+    diagnostics_degraded: bool = False
+
+
 PreflightItemStatus = Literal["PASS", "WARN", "FAIL", "UNKNOWN"]
 
 
