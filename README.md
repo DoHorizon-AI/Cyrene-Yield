@@ -14,11 +14,10 @@ not approved for public redistribution. The checked-in Product tree contains
 source and contracts only; runtime datasets, model weights, and checkpoints
 remain operator-managed artifacts.
 
-The GitHub repository remains private until the owner changes its visibility.
-Until the pinned Plugins revision is publicly reachable and its dependency
-licenses are reviewed, an anonymous clone cannot complete the locked Product
-installation. Public source visibility, binary distribution, hosted CI, and
-local verification are separate gates.
+The GitHub repository and the pinned Plugins revision are publicly reachable,
+so an anonymous clone can resolve the locked Product installation. Public
+source visibility, binary distribution, hosted CI, and real CUDA acceptance
+remain separate gates.
 
 本仓库是 Yield 公开 release 的 clean-root 源码内容；公开规范历史从由此快照创建的
 无父 `main` 根提交开始。原完整提交历史仅保留在私有的
@@ -28,9 +27,8 @@ local verification are separate gates.
 clean root 之外，也未获准公开再分发。当前 Product 树只包含源码与契约；运行时数据集、
 模型权重与 checkpoint 仍由 operator 管理。
 
-GitHub 仓库仍保持 private，必须由 owner 切换可见性。在锁定的 Plugins 修订版可公开
-访问且依赖许可证完成审查前，匿名 clone 不能完成 Product 的锁定安装。公开源码可见性、
-二进制分发、Hosted CI 与本地验证是彼此独立的门禁。
+GitHub 仓库及锁定的 Plugins 修订版均已可公开访问，匿名 clone 可以解析锁定的 Product
+安装。公开源码可见性、二进制分发、Hosted CI 与真实 CUDA 验收仍是彼此独立的门禁。
 
 ## Authoritative Documentation & Contracts
 - **Product API & Training Contract Specification**: [`docs/API.md`](docs/API.md)
@@ -115,6 +113,17 @@ upstream LLaMA Factory migration.
 
 上述命令用于验证 Product core 与本地契约测试，不代表 hosted CI、真实 CUDA 设备、
 模型下载或上游 LLaMA Factory 完整迁移已经通过。
+
+Completed ModelVersions can optionally be published through a Platform-resolved
+`model.registry.v1` direct endpoint. Yield sends only the immutable descriptor
+and source reference; model bytes remain in the Artifact Plane. Configure the
+endpoint with `--model-registry-connection-ref`. A valid acknowledgement is
+stored durably, so reconciliation does not publish the same version twice.
+
+完成的 ModelVersion 可通过 Platform 解析的 `model.registry.v1` 直连端点发布。Yield
+只发送不可变描述符和来源引用，模型字节仍由 Artifact Plane 管理。使用
+`--model-registry-connection-ref` 配置端点；有效回执会被持久化，避免 reconciliation
+重复发布同一版本。
 
 When the Plugins repository is publicly reachable, its immutable revision can
 be inspected separately:

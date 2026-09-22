@@ -72,6 +72,7 @@ files = [
     "training/core/src/cy_exec/training/product_models.py",
     "training/core/src/cy_exec/training/product_service.py",
     "training/core/src/cy_exec/training/product_store.py",
+    "training/core/src/cy_exec/training/model_registry.py",
     "training/core/src/cy_exec/training/product_results.py",
     "training/core/src/cy_exec/training/product_cli.py",
     "training/core/src/cy_exec/training/executors/kernel_rpc.py",

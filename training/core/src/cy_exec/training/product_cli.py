@@ -148,6 +148,10 @@ def main() -> None:
     parser.add_argument("--exchange-token-env", help="Name of the Exchange Product credential variable")
     parser.add_argument("--exchange-endpoint-id")
     parser.add_argument("--exchange-target-binding-id")
+    parser.add_argument(
+        "--model-registry-connection-ref",
+        help="Platform-resolved connection_ref for model.registry.v1",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8092)
     args = parser.parse_args()
@@ -208,6 +212,7 @@ def main() -> None:
         exchange_bearer_token=exchange_token,
         exchange_endpoint_id=args.exchange_endpoint_id,
         exchange_target_binding_id=args.exchange_target_binding_id,
+        model_registry_connection_ref=args.model_registry_connection_ref,
     )
     uvicorn.run(app, host=args.host, port=args.port)
 

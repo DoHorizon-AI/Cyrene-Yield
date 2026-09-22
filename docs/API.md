@@ -116,7 +116,7 @@ flowchart LR
     ModelAnalyzer["model.analyzer.v1<br/>(hf-model-analyzer)"]
     CompatRules["compatibility.evaluator.v1<br/>(compat-rules)"]
     EnvBuilder["environment.builder.v1<br/>(docker-uv-builder)"]
-    ModelRegistry["model.registry.v1<br/>(Candidate)"]
+    ModelRegistry["model.registry.v1<br/>(Optional direct endpoint)"]
     CAS["Platform Artifact Plane (CAS)"]
 
     Yield -->|Admit resources and supervise process| Platform
@@ -126,9 +126,20 @@ flowchart LR
     Yield -->|Direct Plugin call| ModelAnalyzer
     Yield -->|Direct Plugin call| CompatRules
     Yield -->|Direct Plugin call| EnvBuilder
-    Yield -->|Register Produced Checkpoint| ModelRegistry
+    Yield -->|Register completed ModelVersion| ModelRegistry
     Yield -->|Store Weights| CAS
 ```
+
+When `--model-registry-connection-ref` is configured, a completed result calls
+`model.registry.v1/register` with type URL
+`type.cyrene.io/model.registry.v1.register.request`. The payload contains the
+validated immutable `model_version` and the Yield-owned `source_ref`; it never
+contains model bytes or local paths. The response type URL is
+`type.cyrene.io/model.registry.v1.register.response` and must acknowledge the
+same `model_version_id`, an opaque `resource_uri`, a positive
+`resource_version`, and a boolean `created` value. Yield rejects mismatched or
+malformed acknowledgements and retries later; successful acknowledgements are
+recorded as durable idempotency receipts.
 
 - **Yield lifecycle**:
   - `cy_exec.training.lifecycle`: Yield-owned run, attempt, plan, and reconciliation state.
@@ -153,4 +164,4 @@ flowchart LR
 | Dataset Validation Product Adapter | `IMPLEMENTED_LOCAL_ENDPOINT` | Direct `tool.dataset.validator.v1` adapter; parsing/schema/quality algorithms are Plugins-owned. |
 | Native Transformers Adapter | `REMOVED` | No in-tree concrete trainer or compatibility fallback. |
 | Guided WebUI | `PLUGINS_OWNED` | Shipped with the LLaMA Factory Plugin, not the Yield Product package. |
-| Model Registry Publishing | `CONTRACT_CANDIDATE` | Slated for `model.registry.v1` integration. |
+| Model Registry Publishing | `IMPLEMENTED_OPTIONAL_ENDPOINT` | Strict `model.registry.v1` direct adapter with content-identity validation and durable idempotency receipts; a concrete registry remains Plugins-owned. |

@@ -29,6 +29,7 @@ from .contracts.events import TrainingEvent, TrainingEventKind
 from .control_plane import REAL_TRAINING_STEP_ID, TrainingControlPlane
 from .lifecycle import Attempt, PlanStatus
 from .llama_factory_yaml import parse_llama_factory_yaml, render_llama_factory_yaml
+from .model_registry import ModelRegistryPort
 from .product_models import (
     ArtifactRef,
     CreateTrainingDraft,
@@ -102,6 +103,7 @@ class YieldService:
         exchange_bearer_token: str | None = None,
         exchange_endpoint_id: str | None = None,
         exchange_target_binding_id: str | None = None,
+        model_registry: ModelRegistryPort | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
         self.store, self.control, self.artifacts = store, control, artifacts
@@ -111,6 +113,7 @@ class YieldService:
         self.exchange_bearer_token = exchange_bearer_token
         self.exchange_endpoint_id = exchange_endpoint_id
         self.exchange_target_binding_id = exchange_target_binding_id
+        self.model_registry = model_registry
         self._http = http_client or httpx.Client(timeout=30, trust_env=False)
         self.reactor_bearer_token = reactor_bearer_token
         self._lock = RLock()
@@ -652,9 +655,12 @@ class YieldService:
         assert draft.training_run is not None and draft.configuration is not None
         identifier = uuid5(NAMESPACE_URL, draft.training_run.uri + "/result")
         try:
-            return TrainingResultResource.model_validate(self.store.get("result", str(identifier)))
+            result = TrainingResultResource.model_validate(self.store.get("result", str(identifier)))
         except KeyError:
             pass
+        else:
+            self._register_model_version(result)
+            return result
         adapter = artifacts.get("model")
         if adapter is None:
             raise ValueError("YIELD_RESULT_INCOMPLETE: no published adapter Artifact")
@@ -683,10 +689,37 @@ class YieldService:
             model_version=model.to_dict(),
             created_at=_now(),
         )
-        return TrainingResultResource.model_validate(self.store.create_result(_json(result)))
+        created = TrainingResultResource.model_validate(self.store.create_result(_json(result)))
+        self._register_model_version(created)
+        return created
+
+    def _register_model_version(self, result: TrainingResultResource) -> None:
+        """Publish once when configured; Artifact bytes remain in the Artifact Plane."""
+        if self.model_registry is None:
+            return
+        model_version_id = result.model_version.get("id")
+        if not isinstance(model_version_id, str) or not _MODEL_VERSION_ID.fullmatch(model_version_id):
+            raise ValueError("YIELD_MODEL_VERSION_INVALID: result does not contain an immutable ModelVersion")
+        request = {
+            "modelVersion": result.model_version,
+            "sourceRef": result.resource_ref.uri,
+        }
+        digest = hashlib.sha256(
+            json.dumps(request, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        key = "model-registry:" + model_version_id
+        if self.store.recall_receipt(key, digest) is not None:
+            return
+        registration = self.model_registry.register(
+            result.model_version,
+            source_ref=result.resource_ref.uri,
+        )
+        self.store.save_receipt(key, digest, registration.to_dict())
 
     def get_result(self, identifier: UUID) -> TrainingResultResource:
-        return TrainingResultResource.model_validate(self.store.get("result", str(identifier)))
+        result = TrainingResultResource.model_validate(self.store.get("result", str(identifier)))
+        self._register_model_version(result)
+        return result
 
     def list_attempts(self, identifier: UUID) -> list[TrainingAttemptResource]:
         """Expose stable phase diagnostics without leaking host paths or raw logs."""

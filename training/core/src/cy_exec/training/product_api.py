@@ -44,6 +44,11 @@ from .product_models import (
     TrainingRunResource,
 )
 from .llama_factory_yaml import LlamaFactoryYamlError
+from .model_registry import (
+    DirectPluginModelRegistry,
+    ModelRegistryPort,
+    ModelRegistryUnavailable,
+)
 from .product_service import YieldService
 from .product_store import ProductStore
 from .runtime import TrainingRuntime
@@ -61,6 +66,8 @@ def create_app(
     exchange_bearer_token: str | None = None,
     exchange_endpoint_id: str | None = None,
     exchange_target_binding_id: str | None = None,
+    model_registry_connection_ref: str | None = None,
+    model_registry: ModelRegistryPort | None = None,
     control: TrainingControlPlane | None = None,
     http_client: httpx.Client | None = None,
 ) -> FastAPI:
@@ -78,6 +85,11 @@ def create_app(
             runtime.restore_session(launch, handle)
     execution_available = control is not None or executor is not None
     controller = control or TrainingControlPlane(runtime, state_directory / "runs.json", durable_tiny_attempt=True)
+    if model_registry is not None and model_registry_connection_ref is not None:
+        raise ValueError("YIELD_MODEL_REGISTRY_CONFLICT: configure one registry adapter")
+    registry = model_registry
+    if registry is None and model_registry_connection_ref is not None:
+        registry = DirectPluginModelRegistry.from_connection_ref(model_registry_connection_ref)
     service = YieldService(
         store=ProductStore(state_directory / "product.sqlite3"),
         control=controller,
@@ -90,6 +102,7 @@ def create_app(
         exchange_bearer_token=exchange_bearer_token,
         exchange_endpoint_id=exchange_endpoint_id,
         exchange_target_binding_id=exchange_target_binding_id,
+        model_registry=registry,
         http_client=http_client,
     )
     stopped = threading.Event()
@@ -151,6 +164,8 @@ def create_app(
             status, code = 400, exc.code
         elif isinstance(exc, (httpx.HTTPError, grpc.RpcError)):
             status, code = 503, "YIELD_DEPENDENCY_UNAVAILABLE"
+        elif isinstance(exc, ModelRegistryUnavailable):
+            status, code = 503, "YIELD_MODEL_REGISTRY_UNAVAILABLE"
         elif isinstance(exc, ArtifactError):
             status, code = 422, "YIELD_ARTIFACT_UNAVAILABLE"
         else:
@@ -183,6 +198,7 @@ def create_app(
         LlamaFactoryYamlError,
         httpx.HTTPError,
         grpc.RpcError,
+        ModelRegistryUnavailable,
         RequestValidationError,
     ):
         app.add_exception_handler(kind, failure)
@@ -192,6 +208,7 @@ def create_app(
         return {
             "status": "DEGRADED" if background_errors else "READY",
             "trainingConfigured": execution_available,
+            "modelRegistryConfigured": registry is not None,
             "reconcileErrors": list(background_errors),
         }
 

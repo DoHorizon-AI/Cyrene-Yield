@@ -1,7 +1,8 @@
-# Yield Product contract v1 — contract candidate only
+# Yield Product contract v1
 
-Status: `CONTRACT_CANDIDATE_READY`; no Product runtime, production adapter, or
-trainer acceptance is claimed by this branch.
+Status: `IMPLEMENTED_RC`; the Product API and local runtime adapter are covered
+by contract and unit evidence. Real CUDA, remote Artifact storage, and upstream
+trainer acceptance remain separate release gates.
 
 This directory freezes the external Training Product boundary. It deliberately
 does not modify or claim acceptance for the trainer, controller, runtime,
@@ -38,8 +39,7 @@ After durable commits, Yield may publish created/updated notifications for
 `dev.cyrene.yield.training-run.updated.v1`. The common Product event envelope
 contains only resource URI/version and change kind; consumers re-read Yield and
 tolerate duplicates, reordering, and newer versions. Engine output frames are
-measurements, not Product events. This contract-only slice does not claim a
-durable outbox publisher.
+measurements, not Product events. A durable outbox publisher is not claimed.
 
 ## State
 
