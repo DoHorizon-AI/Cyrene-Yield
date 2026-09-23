@@ -1,7 +1,7 @@
 """
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Module: tests.test_log_retention                                   │
-│  Role: Raw log 100 MiB limit and 30-day retention verification.      │
+│  Role: Diagnostics retention for terminal runs (30-day window).      │
 └─────────────────────────────────────────────────────────────────────┘
 """
 
@@ -14,77 +14,90 @@ from uuid import uuid4
 from cy_exec.training.product_store import ProductStore
 
 
-def test_raw_log_size_limit_truncates_at_100mib(tmp_path: Path) -> None:
+def test_purge_removes_diagnostics_only_for_expired_terminal_runs(tmp_path: Path) -> None:
+    """Retention follows terminal state and age, not which runs published a result."""
+
     store = ProductStore(tmp_path / "product.sqlite3")
-    run_id = uuid4()
+    now = datetime.now(UTC)
+    old_terminal = uuid4()
+    recent_terminal = uuid4()
+    active = uuid4()
 
-    log_path = store._log_path(run_id)
-    with log_path.open("wb") as f:
-        f.seek(ProductStore.LOG_SIZE_LIMIT_BYTES)
-        f.write(b"\0")
+    for run_id, message in (
+        (old_terminal, "old failure output"),
+        (recent_terminal, "recent failure output"),
+        (active, "still running"),
+    ):
+        store.append_diagnostics(
+            str(run_id),
+            f"{run_id}:1",
+            [{"timestamp": now.isoformat(), "message": message}],
+        )
 
-    initial_size = log_path.stat().st_size
-    assert initial_size >= ProductStore.LOG_SIZE_LIMIT_BYTES
+    store.record_terminal_run(old_terminal, "FAILED", now - timedelta(days=35))
+    store.record_terminal_run(recent_terminal, "CANCELLED", now - timedelta(days=5))
 
-    # Append lines past 100 MiB
-    store.append_raw_log(run_id, "first line after limit")
-    assert log_path.stat().st_size == initial_size
-
-    # Verify a warning event was recorded
-    events = store.list_events(str(run_id))
-    assert len(events) == 1
-    assert events[0]["kind"] == "warn"
-    assert "Raw log limit reached (100 MiB)" in events[0]["message"]
-
-    # Append another line; should not record a duplicate warning
-    store.append_raw_log(run_id, "second line after limit")
-    events_after = store.list_events(str(run_id))
-    assert len(events_after) == 1
-
-    # For a normal run under the limit, append succeeds
-    normal_run_id = uuid4()
-    store.append_raw_log(normal_run_id, "normal line 1")
-    store.append_raw_log(normal_run_id, "normal line 2")
-    normal_log = store._log_path(normal_run_id)
-    assert normal_log.exists()
-    assert normal_log.read_text(encoding="utf-8") == "normal line 1\nnormal line 2\n"
-
+    assert store.purge_expired_diagnostics() == 1
+    assert store.list_diagnostics(str(old_terminal)) == []
+    assert len(store.list_diagnostics(str(recent_terminal))) == 1
+    # A run that never reached a terminal state keeps its output.
+    assert len(store.list_diagnostics(str(active))) == 1
     store.close()
 
 
-def test_purge_expired_logs_removes_only_terminal_runs(tmp_path: Path) -> None:
+def test_every_terminal_state_is_retained(tmp_path: Path) -> None:
+    """A failed or cancelled run is retained exactly like a completed one."""
+
     store = ProductStore(tmp_path / "product.sqlite3")
-
     now = datetime.now(UTC)
-    old_time = now - timedelta(days=35)
-    recent_time = now - timedelta(days=5)
+    old = now - timedelta(days=40)
 
-    # 1. Terminal run older than 30 days -> should be purged
-    old_terminal_id = uuid4()
-    store.append_raw_log(old_terminal_id, "old terminal log")
-    store.record_terminal_run(old_terminal_id, "COMPLETED", ended_at=old_time)
-    assert store._log_path(old_terminal_id).exists()
+    for state in ("COMPLETED", "FAILED", "CANCELLED"):
+        run_id = uuid4()
+        store.append_diagnostics(
+            str(run_id),
+            f"{run_id}:1",
+            [{"timestamp": now.isoformat(), "message": f"{state} output"}],
+        )
+        store.record_terminal_run(run_id, state, old)
 
-    # 2. Terminal run newer than 30 days (5 days old) -> should NOT be purged
-    recent_terminal_id = uuid4()
-    store.append_raw_log(recent_terminal_id, "recent terminal log")
-    store.record_terminal_run(recent_terminal_id, "FAILED", ended_at=recent_time)
-    assert store._log_path(recent_terminal_id).exists()
+    assert store.purge_expired_diagnostics() == 3
+    store.close()
 
-    # 3. Active run (non-terminal) created long ago -> should NOT be purged
-    old_active_id = uuid4()
-    store.append_raw_log(old_active_id, "active running log")
-    assert store._log_path(old_active_id).exists()
 
-    # Run purge
-    purged_count = store.purge_expired_logs()
-    assert purged_count == 1
+def test_a_result_records_its_run_for_retention(tmp_path: Path) -> None:
+    """A result published before the controller restarted still ages out."""
 
-    # Verify old terminal log file is deleted
-    assert not store._log_path(old_terminal_id).exists()
-    # Verify recent terminal log file still exists
-    assert store._log_path(recent_terminal_id).exists()
-    # Verify active run log file still exists
-    assert store._log_path(old_active_id).exists()
+    store = ProductStore(tmp_path / "product.sqlite3")
+    now = datetime.now(UTC)
+    old_run = uuid4()
+    store.append_diagnostics(
+        str(old_run), f"{old_run}:1", [{"timestamp": now.isoformat(), "message": "old"}]
+    )
+    store.create_result(
+        {
+            "id": str(uuid4()),
+            "createdAt": (now - timedelta(days=40)).isoformat(),
+            "trainingRun": {"id": str(old_run)},
+        }
+    )
 
+    assert store.purge_expired_diagnostics() == 1
+    assert store.list_diagnostics(str(old_run)) == []
+    store.close()
+
+
+def test_reading_an_old_terminal_run_does_not_extend_retention(tmp_path: Path) -> None:
+    """A later observation must not push the retention clock forward."""
+
+    store = ProductStore(tmp_path / "product.sqlite3")
+    run_id = uuid4()
+    old = datetime.now(UTC) - timedelta(days=40)
+    store.record_terminal_run(run_id, "FAILED", old)
+
+    # The service observes the same terminal run again today.
+    store.record_terminal_run(run_id, "FAILED")
+
+    store.append_diagnostics(str(run_id), f"{run_id}:1", [{"message": "old"}])
+    assert store.purge_expired_diagnostics() == 1
     store.close()

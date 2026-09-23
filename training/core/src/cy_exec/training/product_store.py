@@ -21,23 +21,17 @@ from uuid import UUID
 class ProductStore:
     """Serialize only Yield resources; never store model or dataset content."""
 
-    LOG_SIZE_LIMIT_BYTES = 100 * 1024 * 1024  # 100 MiB
     LOG_RETENTION_DAYS = 30
 
     def __init__(
         self,
         path: Path,
         *,
-        log_size_limit_bytes: int = LOG_SIZE_LIMIT_BYTES,
         log_retention_days: int = LOG_RETENTION_DAYS,
-        logs_dir: Path | None = None,
     ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
-        self.log_size_limit_bytes = log_size_limit_bytes
         self.log_retention_days = log_retention_days
-        self._logs_dir = logs_dir or (path.parent / "raw_logs")
-        self._truncation_flags: set[str] = set()
         self._connection = sqlite3.connect(path, check_same_thread=False)
         self._lock = RLock()
         with self._connection:
@@ -292,53 +286,23 @@ class ProductStore:
             raise ValueError("YIELD_IDEMPOTENCY_CONFLICT: key already identifies another action")
         return json.loads(row[1])
 
-    def _log_path(self, run_id: UUID | str) -> Path:
-        self._logs_dir.mkdir(parents=True, exist_ok=True)
-        return self._logs_dir / f"{run_id}.log"
-
-    def _truncation_flagged(self, run_id: str) -> bool:
-        with self._lock:
-            if run_id in self._truncation_flags:
-                return True
-            row = self._connection.execute(
-                "SELECT 1 FROM training_events WHERE run_id=? AND document LIKE '%Raw log limit reached%'",
-                (run_id,),
-            ).fetchone()
-            if row is not None:
-                self._truncation_flags.add(run_id)
-                return True
-            return False
-
-    def _flag_truncation(self, run_id: str) -> None:
-        with self._lock:
-            self._truncation_flags.add(run_id)
-
-    def append_raw_log(self, run_id: UUID | str, line: str) -> None:
-        """追加原始日志行；超过 100 MiB 后静默丢弃并记录一次 TRUNCATED 事件。"""
-        run_str = str(run_id)
-        log_path = self._log_path(run_str)
-        current_size = log_path.stat().st_size if log_path.exists() else 0
-        if current_size >= self.log_size_limit_bytes:
-            if not self._truncation_flagged(run_str):
-                self._flag_truncation(run_str)
-                self.append_events(
-                    run_str,
-                    "0",
-                    [
-                        {
-                            "kind": "warn",
-                            "message": ("Raw log limit reached (100 MiB). Further lines discarded."),
-                        }
-                    ],
-                )
-            return
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
-
     def record_terminal_run(self, run_id: UUID | str, state: str, ended_at: datetime | None = None) -> None:
-        """Record a run transitioning to a terminal state (COMPLETED, FAILED, CANCELLED)."""
+        """Record a run transitioning to a terminal state (COMPLETED, FAILED, CANCELLED).
+
+        The earliest observed timestamp wins: a run is read many times, and a
+        later observation must not extend its retention window.
+        """
+
         ts = (ended_at or datetime.now(UTC)).isoformat()
         with self._lock, self._connection:
+            row = self._connection.execute(
+                "SELECT ended_at FROM run_terminals WHERE run_id=?", (str(run_id),)
+            ).fetchone()
+            if row is not None and str(row[0]) <= ts:
+                self._connection.execute(
+                    "UPDATE run_terminals SET state=? WHERE run_id=?", (state, str(run_id))
+                )
+                return
             self._connection.execute(
                 "INSERT OR REPLACE INTO run_terminals(run_id, state, ended_at) VALUES(?,?,?)",
                 (str(run_id), state, ts),
@@ -373,17 +337,6 @@ class ProductStore:
                     except (ValueError, TypeError):
                         pass
         return sorted(terminal_ids)
-
-    def purge_expired_logs(self) -> int:
-        """删除超过 30 天的终态 Run 的原始日志文件，保留结构化事件和 metadata。"""
-        cutoff = datetime.now(UTC) - timedelta(days=self.log_retention_days)
-        purged = 0
-        for run_id in self._terminal_run_ids_before(cutoff):
-            log_path = self._log_path(run_id)
-            if log_path.exists():
-                log_path.unlink()
-                purged += 1
-        return purged
 
     def close(self) -> None:
         self._connection.close()
