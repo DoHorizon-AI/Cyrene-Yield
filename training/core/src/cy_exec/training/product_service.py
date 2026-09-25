@@ -341,6 +341,11 @@ class YieldService:
             PlanStatus.AWAITING_RETRY: "AWAITING_RETRY",
         }
         state = states[run.observed_status]
+        if state in _TERMINAL_RUN_STATES:
+            # Retention keys off the terminal table, and a failed or cancelled
+            # attempt is exactly the case whose output someone will look for, so
+            # every terminal observation is recorded, not only a published result.
+            self.store.record_terminal_run(identifier, state)
         artifacts = self.control.output_artifacts(run.run_id)
         result = self._result(draft, artifacts) if state == "COMPLETED" else None
         lineage = [configuration.base_model.artifact.digest, draft.dataset_version.artifact.digest]

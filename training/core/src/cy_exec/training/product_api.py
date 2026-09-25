@@ -134,7 +134,7 @@ def create_app(
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
-            service.store.purge_expired_logs()
+            service.store.purge_expired_diagnostics()
         except Exception:
             pass
 
@@ -142,7 +142,7 @@ def create_app(
             while True:
                 try:
                     await asyncio.sleep(24 * 3600)
-                    service.store.purge_expired_logs()
+                    service.store.purge_expired_diagnostics()
                 except asyncio.CancelledError:
                     break
                 except Exception:
