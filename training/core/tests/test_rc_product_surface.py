@@ -25,7 +25,10 @@ from test_product_lifecycle import AdapterFixtureExecutor, _base, _runtime
 
 
 class _EventExecutor(AdapterFixtureExecutor):
-    """Emit one structured trainer line per attempt for SSE replay coverage."""
+    """Emit one structured trainer line per attempt for SSE replay coverage.
+
+    为 SSE replay 覆盖范围输出每个 attempt 一条结构化 trainer 行。
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -40,7 +43,10 @@ class _EventExecutor(AdapterFixtureExecutor):
 
 
 class _ResumeExecutor(AdapterFixtureExecutor):
-    """Fail the first real attempt after publishing a usable checkpoint."""
+    """Fail the first real attempt after publishing a usable checkpoint.
+
+    在发布可用 checkpoint 后,让第一个真实 attempt 失败。
+    """
 
     def start(self, launch):
         handle = super().start(launch)

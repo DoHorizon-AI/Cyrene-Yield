@@ -23,7 +23,10 @@ class ContractModel(PydanticModel):
 
 
 class ArtifactRef(ContractModel):
-    """Projection of Platform ArtifactRef; identity is validated by its SDK."""
+    """Projection of Platform ArtifactRef; identity is validated by its SDK.
+
+    Platform ArtifactRef 的映射;身份由其 SDK 验证。
+    """
 
     model_config = ConfigDict(alias_generator=None, populate_by_name=True, extra="forbid")
     uri: str = Field(pattern=r"^artifact://sha256/[0-9a-f]{64}$")
@@ -44,7 +47,10 @@ class ArtifactRef(ContractModel):
 
 
 class ResourceRef(ContractModel):
-    """Opaque, versioned identity owned by the source Product."""
+    """Opaque, versioned identity owned by the source Product.
+
+    由来源 Product 拥有的不透明版本化身份。
+    """
 
     uri: str = Field(pattern=r"^(https?://|cyrene://)[^\s]+$")
     id: UUID
@@ -90,7 +96,10 @@ class TrainingParameters(ContractModel):
 
 
 class LlamaFactoryPrefill(ContractModel):
-    """Mapped LLaMA Factory fields kept on a draft before preparation."""
+    """Mapped LLaMA Factory fields kept on a draft before preparation.
+
+    准备之前保留在 draft 上的 LLaMA Factory 字段映射。
+    """
 
     model_name_or_path: str | None = Field(
         default=None, min_length=1, max_length=4096, exclude_if=lambda value: value is None
@@ -111,7 +120,10 @@ class CreateTrainingDraft(ContractModel):
 
 
 class ImportLlamaFactoryYaml(ContractModel):
-    """Create a draft while importing a strict LLaMA Factory YAML document."""
+    """Create a draft while importing a strict LLaMA Factory YAML document.
+
+    导入严格的 LLaMA Factory YAML 文档并创建 draft。
+    """
 
     name: str = Field(min_length=1, max_length=200)
     dataset_version: DatasetVersionRef
@@ -200,7 +212,10 @@ class TrainingRunResource(ContractModel):
 
 
 class TrainingRunPage(ContractModel):
-    """Stable offset page for the training-run collection."""
+    """Stable offset page for the training-run collection.
+
+    训练运行集合的稳定 offset 分页。
+    """
 
     items: list[TrainingRunResource]
     offset: int = Field(ge=0)
@@ -216,7 +231,10 @@ class HandoffReceipt(ContractModel):
 
 
 class TrainingAttemptResource(ContractModel):
-    """Public diagnostic projection; executor paths stay private."""
+    """Public diagnostic projection; executor paths stay private.
+
+    公开诊断映射;executor 路径保持私有。
+    """
 
     id: UUID
     training_run_id: UUID
@@ -248,7 +266,10 @@ class TrainingEventResource(ContractModel):
 
 
 class TrainingEventsPage(ContractModel):
-    """Durable event page used by polling clients before opening SSE."""
+    """Durable event page used by polling clients before opening SSE.
+
+    轮询客户端在建立 SSE 连接前使用的持久事件分页。
+    """
 
     events: list[TrainingEventResource]
     after_sequence: int = Field(ge=0)
@@ -267,6 +288,10 @@ class DiagnosticRecord(ContractModel):
 
     Raw trainer output never reaches the browser: the message is redacted on the
     way in, and the page carries no path, credential, or environment content.
+
+    控制台可以直接展示的一条脱敏诊断行。
+
+    原始 trainer 输出绝不会发送到浏览器:消息在写入时脱敏,分页中也不包含路径、凭证或环境内容。
     """
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
@@ -298,7 +323,7 @@ PreflightItemStatus = Literal["PASS", "WARN", "FAIL", "UNKNOWN"]
 
 
 class PreflightItem(ContractModel):
-    """One preflight observation with a user-facing reason. | 单项预检结果。"""
+    """One preflight observation with a user-facing reason. | 包含面向用户原因说明的一项预检观察结果。"""
 
     id: str = Field(min_length=1, max_length=200)
     status: PreflightItemStatus
@@ -309,7 +334,7 @@ class PreflightItem(ContractModel):
 
 
 class PreflightReport(ContractModel):
-    """Aggregated preflight outcome for one TrainingRun. | 训练预检报告。"""
+    """Aggregated preflight outcome for one TrainingRun. | 单个 TrainingRun 的汇总预检结果。"""
 
     status: Literal["PASS", "WARN", "FAIL"]
     items: list[PreflightItem]
@@ -317,7 +342,7 @@ class PreflightReport(ContractModel):
 
 
 class ResumeTrainingRun(ContractModel):
-    """Explicit manual resume from a complete checkpoint. | 显式 checkpoint 恢复请求。"""
+    """Explicit manual resume from a complete checkpoint. | 基于完整 checkpoint 明确发起的手动恢复请求。"""
 
     checkpoint_artifact: ArtifactRef | None = Field(
         default=None, exclude_if=lambda value: value is None

@@ -1,8 +1,14 @@
-"""Executor protocol. Concrete executors must not leak into TrainingLaunchSpec."""
+"""Executor protocol. Concrete executors must not leak into TrainingLaunchSpec.
+
+Executor 协议。具体 executor 不得泄漏到 TrainingLaunchSpec 中。
+"""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/executors/base.py
+# │ 中文:文件:training/core/src/cy_exec/training/executors/base.py
 # │ Module: training/core/src/cy_exec/training/executors/base
+# │ 模块:training/core/src/cy_exec/training/executors/base
 # │ Role: Product execution port shared by Platform-backed adapters.
+# │ 职责:Platform 执行适配器共用的 Product 执行端口。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -41,7 +47,10 @@ class CancelOutcome:
 
 @dataclass
 class ProcessHandle:
-    """Runtime handle for a launched process tree. Not part of the product contract."""
+    """Runtime handle for a launched process tree. Not part of the product contract.
+
+    已启动进程树的 runtime 句柄,不属于 Product 契约。
+    """
 
     pid: int
     argv: Sequence[str]
@@ -64,7 +73,10 @@ class TrainingExecutor(Protocol):
 
 
 class ExecutionControlError(RuntimeError):
-    """Platform execution could not start, observe, cancel, or confirm cleanup."""
+    """Platform execution could not start, observe, cancel, or confirm cleanup.
+
+    Platform 执行无法启动、观测、取消或确认清理。
+    """
 
     def __init__(self, message: str, *, lost: bool = False, cleanup_attempted: bool = False) -> None:
         super().__init__(message)

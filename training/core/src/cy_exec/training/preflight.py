@@ -1,4 +1,7 @@
-"""Training-specific orchestration over Platform resource facts and Product policy."""
+"""Training-specific orchestration over Platform resource facts and Product policy.
+
+基于 Platform 资源事实与 Product 策略执行的训练专用编排。
+"""
 
 from __future__ import annotations
 
@@ -30,7 +33,10 @@ _COMPATIBILITY_EVALUATOR_CONNECTION_ENV = "CYRENE_COMPATIBILITY_EVALUATOR_CONNEC
 
 
 class TrainingPreflight:
-    """Combines training intent with resource facts and replaceable Product policy."""
+    """Combines training intent with resource facts and replaceable Product policy.
+
+    将训练意图与资源事实和可替换的 Product 策略组合起来。
+    """
 
     def __init__(
         self,

@@ -47,3 +47,42 @@ private `Cyrene-Yield-history-archive`; they are not public release inputs.
 Architecture changes must preserve this owner split and the repository's independent build gates.
 
 架构变更必须保持上述权威分工与仓库独立构建门禁。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# Yield 文档
+
+Yield 文档索引。
+
+## 仓库范围
+
+Yield 负责训练意图、run/attempt/result 状态、策略、reconciliation、checkpoint 发布和 Product 交接。具体训练引擎和可复用的数据集校验是由 Plugins 所有的能力，通过 fail-closed 直连适配器调用。
+
+本文档说明 clean-root 源码内容。此前完整历史和排除的 LLaMA Factory 演示数据集仅保留在私有 Cyrene-Yield-history-archive 中，不属于公开 release 输入。
+
+## 阅读地图
+
+| 路径 | 职责 |
+|---|---|
+| architecture/overview.md | 训练生命周期、runtime 拓扑与权威边界 |
+| architecture/tool-system.md | 引擎接缝、执行器、preflight 与 checkpoint 流程 |
+| architecture/mcp-integration.md | 训练操作的协议适配边界 |
+| modules/yield/README.md | Core 与 Plugin 模块地图 |
+| glossary.md | 双语训练术语 |
+| faq.md | 常见问题与排障指南 |
+| API.md | Product/API 契约与状态模型 |
+| REPOSITORY-LIFECYCLE.md | 仓库治理与发布边界 |
+| DEPENDENCIES.md | 依赖许可证记录与 SBOM 流程 |
+| logging-and-errors.md | 跨仓日志、错误码与诊断规范（草案 v0.1） |
+
+## 推荐阅读顺序
+
+1. 阅读 architecture/overview.md，了解职责与生命周期。
+2. 阅读 architecture/tool-system.md，了解 runtime 接缝。
+3. 阅读 modules/yield/README.md，然后阅读 core 和 plugin 指南。
+4. 将 API.md、glossary.md 和 faq.md 用作参考。
+
+## 变更边界
+
+架构变更必须保持上述 owner 分工和仓库独立构建门禁。

@@ -1,4 +1,7 @@
-"""Yield-internal environment policy contracts and deterministic resolver."""
+"""Yield-internal environment policy contracts and deterministic resolver.
+
+Yield 内部的环境策略契约与确定性解析器。
+"""
 
 from .contracts import (
     EnvironmentCandidate,

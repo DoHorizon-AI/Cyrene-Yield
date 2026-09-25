@@ -1,7 +1,10 @@
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/tests/test_training_preflight_and_tiny_dry_run.py
+# │ 中文:文件:training/core/tests/test_training_preflight_and_tiny_dry_run.py
 # │ Module: training/core/tests/test_training_preflight_and_tiny_dry_run
+# │ 模块:training/core/tests/test_training_preflight_and_tiny_dry_run
 # │ Role: Yield core test module — verifies the unified training runtime and its contracts.
+# │ 职责:Yield 核心测试模块,验证统一训练 runtime 与契约。
 # │
 # │ 模块职责：Yield 核心测试模块——验证统一训练运行时及其契约。
 # └─────────────────────────────────────────────────────────────────────┘

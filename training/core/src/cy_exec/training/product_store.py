@@ -19,7 +19,10 @@ from uuid import UUID
 
 
 class ProductStore:
-    """Serialize only Yield resources; never store model or dataset content."""
+    """Serialize only Yield resources; never store model or dataset content.
+
+    只序列化 Yield 资源;绝不存储模型或数据集内容。
+    """
 
     LOG_SIZE_LIMIT_BYTES = 100 * 1024 * 1024  # 100 MiB
     LOG_RETENTION_DAYS = 30
@@ -92,7 +95,10 @@ class ProductStore:
             )
 
     def create_draft(self, key: str, command: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
-        """Commit resource and idempotency receipt in the same transaction."""
+        """Commit resource and idempotency receipt in the same transaction.
+
+        在同一事务中提交资源与幂等回执。
+        """
         digest = hashlib.sha256(json.dumps(command, sort_keys=True).encode()).hexdigest()
         with self._lock, self._connection:
             row = self._connection.execute("SELECT digest,id FROM receipts WHERE key=?", (key,)).fetchone()
@@ -107,7 +113,10 @@ class ProductStore:
         return document
 
     def create_result(self, document: dict[str, Any]) -> dict[str, Any]:
-        """Keep the first immutable result when reconciliation and reads race."""
+        """Keep the first immutable result when reconciliation and reads race.
+
+        reconciliation 和读取发生竞争时,保留最早的不可变结果。
+        """
         with self._lock, self._connection:
             self._connection.execute(
                 "INSERT OR IGNORE INTO resources VALUES ('result', ?, ?)",
@@ -158,7 +167,10 @@ class ProductStore:
         return appended
 
     def event_count(self, run_id: str, attempt_id: str) -> int:
-        """Return how many events are already durable for one attempt."""
+        """Return how many events are already durable for one attempt.
+
+        返回一个 attempt 已持久化的事件数量。
+        """
 
         with self._lock:
             row = self._connection.execute(
@@ -207,7 +219,10 @@ class ProductStore:
         return appended
 
     def diagnostics_count(self, run_id: str, attempt_id: str) -> int:
-        """Return how many diagnostic records are already durable for one attempt."""
+        """Return how many diagnostic records are already durable for one attempt.
+
+        返回一个 attempt 已持久化的诊断记录数量。
+        """
 
         with self._lock:
             row = self._connection.execute(
@@ -217,7 +232,10 @@ class ProductStore:
         return int(row[0])
 
     def diagnostics_degraded(self, run_id: str) -> bool:
-        """True when a persisted record shows the output budget was exhausted."""
+        """True when a persisted record shows the output budget was exhausted.
+
+        当持久化记录表明输出字节上限已耗尽时返回 True。
+        """
 
         with self._lock:
             row = self._connection.execute(
@@ -227,7 +245,10 @@ class ProductStore:
         return row is not None
 
     def purge_expired_diagnostics(self) -> int:
-        """Drop persisted diagnostics for terminal runs past the retention window."""
+        """Drop persisted diagnostics for terminal runs past the retention window.
+
+        删除超过保留期限的终态 run 持久化诊断记录。
+        """
 
         cutoff = datetime.now(UTC) - timedelta(days=self.log_retention_days)
         purged = 0
@@ -265,7 +286,10 @@ class ProductStore:
         return [json.loads(row[0]) for row in rows]
 
     def recall_receipt(self, key: str, digest: str) -> dict[str, Any] | None:
-        """Resolve one durable action receipt or reject conflicting reuse."""
+        """Resolve one durable action receipt or reject conflicting reuse.
+
+        解析一个持久化操作回执,或拒绝冲突的重复使用。
+        """
 
         with self._lock:
             row = self._connection.execute(
@@ -278,7 +302,10 @@ class ProductStore:
         return json.loads(row[1])
 
     def save_receipt(self, key: str, digest: str, document: dict[str, Any]) -> dict[str, Any]:
-        """Persist an action receipt for later idempotent replay."""
+        """Persist an action receipt for later idempotent replay.
+
+        持久化操作回执,以供后续幂等重放。
+        """
 
         with self._lock, self._connection:
             self._connection.execute(

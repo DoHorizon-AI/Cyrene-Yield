@@ -1,4 +1,7 @@
-"""Yield-owned training lifecycle and execution adapter."""
+"""Yield-owned training lifecycle and execution adapter.
+
+Yield 所有的训练生命周期与执行适配器。
+"""
 
 from __future__ import annotations
 
@@ -51,11 +54,17 @@ EXECUTION_RECOVERY_UNAVAILABLE = "EXECUTION_RECOVERY_UNAVAILABLE"
 
 
 class TrainingStateRecoveryError(RuntimeError):
-    """Persisted Product state cannot be restored without changing intent."""
+    """Persisted Product state cannot be restored without changing intent.
+
+    如果恢复持久化 Product 状态会改变意图,则拒绝恢复。
+    """
 
 
 class TrainingPlanCompiler:
-    """Compiles TrainingSpec into generic PlanSteps without changing engine execution."""
+    """Compiles TrainingSpec into generic PlanSteps without changing engine execution.
+
+    将 TrainingSpec 编译为通用 PlanSteps,不改变引擎执行。
+    """
 
     def compile(self, spec: TrainingSpec, environment_lock: EnvironmentLock) -> ExecutionPlan:
         inputs = _input_artifacts(spec)
@@ -104,7 +113,10 @@ class TrainingPlanCompiler:
 
 
 class TrainingControlPlane:
-    """Drives Product phases while reusing TrainingRuntime's real execution path."""
+    """Drives Product phases while reusing TrainingRuntime's real execution path.
+
+    复用 TrainingRuntime 的真实执行路径驱动 Product 各阶段。
+    """
 
     def __init__(
         self,
@@ -154,17 +166,26 @@ class TrainingControlPlane:
         return self._control.load(run_id)
 
     def spec(self, run_id: str) -> TrainingSpec:
-        """Read the immutable validated intent for one ProductRun."""
+        """Read the immutable validated intent for one ProductRun.
+
+        读取一个 ProductRun 不可变且已验证的意图。
+        """
 
         return self._require_spec(run_id)
 
     def environment_lock(self, run_id: str) -> EnvironmentLock:
-        """Read the immutable resolved environment identity for one ProductRun."""
+        """Read the immutable resolved environment identity for one ProductRun.
+
+        读取一个 ProductRun 不可变且已解析的环境身份。
+        """
 
         return self._require_lock(run_id)
 
     def preflight_result(self, run_id: str):
-        """Evaluate the configured preflight ports for one ProductRun."""
+        """Evaluate the configured preflight ports for one ProductRun.
+
+        评估一个 ProductRun 已配置的 preflight 端口。
+        """
 
         return self._preflight.evaluate(
             self._require_spec(run_id),
@@ -173,25 +194,37 @@ class TrainingControlPlane:
         )
 
     def session_events(self, attempt_id: str):
-        """Return the in-process events observed for one durable Attempt."""
+        """Return the in-process events observed for one durable Attempt.
+
+        返回针对一个持久化 Attempt 观测到的进程内事件。
+        """
 
         session = self._runtime.get(str(attempt_id))
         return tuple(session.events) if session is not None else ()
 
     def session_diagnostics(self, attempt_id: str):
-        """Return the in-process diagnostic records observed for one Attempt."""
+        """Return the in-process diagnostic records observed for one Attempt.
+
+        返回针对一个 Attempt 观测到的进程内诊断记录。
+        """
 
         session = self._runtime.get(str(attempt_id))
         return tuple(session.diagnostics) if session is not None else ()
 
     def session_diagnostics_degraded(self, attempt_id: str) -> bool:
-        """True when the attempt's raw output could not be kept in full."""
+        """True when the attempt's raw output could not be kept in full.
+
+        当 attempt 的原始输出未能完整保留时返回 True。
+        """
 
         session = self._runtime.get(str(attempt_id))
         return bool(session.diagnostics_degraded) if session is not None else False
 
     def persisted_session_events(self, run_id: str, attempt_id: str):
-        """Return the redacted event snapshot saved with an Attempt."""
+        """Return the redacted event snapshot saved with an Attempt.
+
+        返回随 Attempt 保存的脱敏事件快照。
+        """
 
         attempt = self._require_attempt(run_id, attempt_id)
         raw = attempt.metadata.get(TRAINING_EVENTS_METADATA)
@@ -214,7 +247,10 @@ class TrainingControlPlane:
         return tuple(events)
 
     def resume(self, run_id: str, *, checkpoint_path: str, step_id: str = REAL_TRAINING_STEP_ID) -> ProductRun:
-        """Resume a stopped ProductRun from a complete checkpoint as a new Attempt."""
+        """Resume a stopped ProductRun from a complete checkpoint as a new Attempt.
+
+        基于完整 checkpoint,将已停止的 ProductRun 作为新 Attempt 恢复。
+        """
 
         if not checkpoint_path or not Path(checkpoint_path).exists():
             raise ValueError("YIELD_RESUME_CHECKPOINT_MISSING: stage a complete checkpoint before resume")
@@ -226,7 +262,10 @@ class TrainingControlPlane:
         return self._control.request_cancel(run_id)
 
     def output_artifacts(self, run_id: str) -> Dict[str, ArtifactRef]:
-        """Return the latest durable result ArtifactRefs for the real training step."""
+        """Return the latest durable result ArtifactRefs for the real training step.
+
+        返回真实训练步骤最近持久化的结果 ArtifactRef。
+        """
 
         run = self._control.load(run_id)
         for attempt in reversed(run.attempts):
@@ -240,6 +279,10 @@ class TrainingControlPlane:
         Checkpoint identity is read from the persisted Attempt metadata rather
         than from a private output path, so a resume request can be validated
         after the control process has restarted.
+
+        返回最近一次真实 Attempt 的 checkpoint 制品。
+
+        Checkpoint 身份从持久化 Attempt 元数据读取,而不是从私有输出路径读取,因此控制进程重启后仍可验证恢复请求。
         """
 
         artifacts = self.output_artifacts(run_id)
@@ -250,7 +293,10 @@ class TrainingControlPlane:
         }
 
     def reconcile_once(self, run_id: str) -> ProductRun:
-        """Perform one Product action; callers decide polling cadence."""
+        """Perform one Product action; callers decide polling cadence.
+
+        执行一次 Product 操作;轮询频率由调用方决定。
+        """
 
         action = self._control.next_action(run_id)
         if action.kind in {
@@ -290,7 +336,9 @@ class TrainingControlPlane:
         if attempt.step_id == TINY_DRY_RUN_STEP_ID:
             if self._durable_tiny_attempt:
                 # Preflight is already committed as the preceding plan step.
+                # 前置校验已作为前一个计划步骤提交。
                 # Persist this real bounded execution exactly like full training.
+                # 像完整训练一样持久化此次真实的有界执行。
                 engine = self._capability_resolver.resolve(YIELD_TRAINING_RUNTIME_REQUIREMENT)
                 bounded = TinyDryRun.bounded_spec(spec)
                 bounded.job_id = str(attempt.attempt_id)

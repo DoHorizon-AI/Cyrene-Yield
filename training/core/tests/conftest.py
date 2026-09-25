@@ -1,4 +1,7 @@
-"""Standalone Yield tests with exact Platform SDK and Plugin owner bindings."""
+"""Standalone Yield tests with exact Platform SDK and Plugin owner bindings.
+
+使用精确 Platform SDK 和 Plugin 所有者绑定的独立 Yield 测试。
+"""
 
 from __future__ import annotations
 
@@ -32,15 +35,22 @@ for source in TEST_PYTHON_PATHS:
         sys.path.insert(0, source)
 
 # Child workers must resolve the same exact SDK snapshot as the test process.
+# 子 worker 必须解析与测试进程完全相同的 SDK 快照。
 inherited_python_path = os.environ.get("PYTHONPATH", "")
 os.environ["PYTHONPATH"] = os.pathsep.join([*(str(source) for source in TEST_PYTHON_PATHS), inherited_python_path])
 
 
 class _LlamaFactoryContractFixture:
-    """Offline launch-contract fixture; real training remains a Plugin acceptance lane."""
+    """Offline launch-contract fixture; real training remains a Plugin acceptance lane.
+
+    离线 launch 契约 fixture;真实训练属于 Plugin 验收通道。
+    """
 
     def invoke(self, method: str, request: dict[str, Any]) -> dict[str, Any]:
-        """Return deterministic contract payloads without implementing a trainer."""
+        """Return deterministic contract payloads without implementing a trainer.
+
+        返回确定性的契约 payload,不实现 trainer。
+        """
 
         if method == "inspect":
             return {
@@ -133,14 +143,17 @@ _PREFLIGHT_SERVERS: list[Any] = []
 
 
 def pytest_configure() -> None:
-    """Start the exact pinned Plugin implementations over real direct endpoints."""
+    """Start the exact pinned Plugin implementations over real direct endpoints.
+
+    通过真实直连端点启动精确锁定的 Plugin 实现。
+    """
 
     try:
         from compat_rules import CompatibilityRuleEvaluator
         from cyrene_plugin_runtime import serve
         from dataset_validator import DatasetValidatorPlugin
         from hf_model_analyzer import HfModelAnalyzer
-    except ImportError as exc:  # pragma: no cover - dependency failure is explicit
+    except ImportError as exc:  # pragma: no cover - dependency failure is explicit | 依赖故障会被显式报告
         raise RuntimeError("Yield tests require the pinned Plugins runtime and preflight owner packages") from exc
 
     bindings = (
@@ -173,7 +186,10 @@ def pytest_configure() -> None:
 
 
 def pytest_unconfigure() -> None:
-    """Stop Plugin endpoints and remove their process-local connection refs."""
+    """Stop Plugin endpoints and remove their process-local connection refs.
+
+    停止 Plugin 端点并移除进程本地 connection ref。
+    """
 
     for environment_name in (
         "CYRENE_MODEL_ANALYZER_CONNECTION_REF",

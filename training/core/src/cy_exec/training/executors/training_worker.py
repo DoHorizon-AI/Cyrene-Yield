@@ -21,8 +21,11 @@ from pathlib import Path
 from typing import Any
 
 # One attempt may keep at most 100 MiB of raw trainer output. Beyond that the
+# 每个 attempt 最多保留 100 MiB 原始 trainer 输出。超过上限后,
 # sink keeps draining so the trainer never blocks on a full pipe, and says so
+# sink 会继续排空数据,避免 trainer 被满载 pipe 阻塞,并通过一条 budget
 # through a single budget record plus the degraded marker.
+# 记录和降级标记说明此情况。
 DIAGNOSTICS_LIMIT_BYTES = 100 * 1024 * 1024
 DIAGNOSTICS_FILE_NAME = "diagnostics.ndjson"
 DEGRADED_FILE_NAME = "diagnostics.degraded"
@@ -36,13 +39,19 @@ class DiagnosticsSink:
     stdout and stderr are drained concurrently because a trainer that fills one
     pipe while the reader sits on the other deadlocks. Records are serialised by
     a single writer so interleaving never corrupts a line.
+
+    在单一 writer 线程中,将两个 trainer 输出流写为 NDJSON。
+
+    stdout 与 stderr 由并发线程排空;如果 trainer 填满一个 pipe,而读取线程正在等待另一个 pipe,就会发生死锁。记录由单一 writer 串行化,避免交错内容破坏单行记录。
     """
 
     def __init__(self, root: Path, *, limit_bytes: int = DIAGNOSTICS_LIMIT_BYTES) -> None:
         self._path = root / DIAGNOSTICS_FILE_NAME
         self._degraded_path = root / DEGRADED_FILE_NAME
         # The host still harvests business events from the merged runtime log,
+        # Host 仍从合并后的 runtime 日志采集业务事件,
         # so raw lines keep going there alongside the tagged NDJSON copy.
+        # 因此原始行仍会与带标签的 NDJSON 副本一同写入该日志。
         self._runtime_log_path = root / RUNTIME_LOG_FILE_NAME
         self._limit_bytes = limit_bytes
         self._pending: queue.Queue[tuple[str, str] | None] = queue.Queue()
@@ -63,7 +72,10 @@ class DiagnosticsSink:
         self._pending.put((stream, text))
 
     def close(self, timeout: float = 10.0) -> bool:
-        """Stop the writer and report whether diagnostics are degraded."""
+        """Stop the writer and report whether diagnostics are degraded.
+
+        停止 writer,并报告诊断是否处于降级状态。
+        """
 
         self._pending.put(None)
         self._thread.join(timeout)
@@ -151,7 +163,10 @@ class DiagnosticsSink:
 
 
 def _pump(pipe: Any, stream: str, sink: DiagnosticsSink) -> None:
-    """Forward one pipe line by line; never let a full pipe stall the trainer."""
+    """Forward one pipe line by line; never let a full pipe stall the trainer.
+
+    逐行转发一个 pipe 的内容;不得因 pipe 已满而阻塞 trainer。
+    """
 
     try:
         for line in pipe:
@@ -166,8 +181,12 @@ def _pump(pipe: Any, stream: str, sink: DiagnosticsSink) -> None:
 
 
 def main() -> None:
-    """Run the signed launch intent and record the trainer's actual completion."""
+    """Run the signed launch intent and record the trainer's actual completion.
+
+    运行已签名的 launch 意图,并记录 trainer 的实际完成状态。
+    """
     # The signed installation stages this transport module beside the worker.
+    # 已签名安装会将此传输模块暂存到 worker 旁边。
     rpc = importlib.import_module("kernel_rpc")
 
     root = Path(__file__).resolve().parent
@@ -238,8 +257,10 @@ def main() -> None:
     sink.start()
     try:
         # stdout and stderr are piped separately and drained by two threads: a
+        # stdout 和 stderr 分别通过 pipe 传输并由两个线程排空:若
         # trainer that fills one pipe while the reader sits on the other blocks.
-        process = subprocess.Popen(  # noqa: S603 - the signed launch intent
+        # trainer 填满一个 pipe 而读取线程等待另一个 pipe,就会发生阻塞。
+        process = subprocess.Popen(  # noqa: S603 - the signed launch intent | 使用已签名的 launch intent。
             argv,
             cwd=working_directory,
             env=environment,
@@ -261,13 +282,16 @@ def main() -> None:
             for reader in readers:
                 reader.join(timeout=5)
         # Drain whatever the trainer wrote on its way out before reporting a
+        # 报告降级状态前,先排空 trainer 退出时写入的内容,
         # degraded state, otherwise the last root-cause lines are lost.
         sink.close()
         if code:
             raise subprocess.CalledProcessError(code, argv)
     finally:
         # The sink is closed here too so a launch that never started still
+        # 此处也会关闭 sink,以便从未启动的 launch 仍可
         # stops its writer instead of leaving a daemon thread behind.
+        # 停止 writer,避免遗留 daemon 线程。
         sink.close(timeout=1.0)
         pending = root / "completion.pending"
         with pending.open("w", encoding="utf-8") as stream:
@@ -276,6 +300,7 @@ def main() -> None:
             os.fsync(stream.fileno())
         os.replace(pending, root / "completion.json")
         # The host confirms ReleaseLease before converting this into a result.
+        # Host 确认 ReleaseLease 后,才会将其转换为结果。
         finished.set()
         outgoing.put(None)
         client.close()

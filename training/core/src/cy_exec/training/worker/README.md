@@ -18,3 +18,23 @@ Start with `training/core/src/cy_exec/training/worker/__init__.py` and then foll
 Read sibling modules in runtime order; use the parent README for ownership boundaries.
 从 `training/core/src/cy_exec/training/worker/__init__.py` 开始，再按包入口或导入关系继续阅读。
 按运行时顺序阅读同级模块；职责边界请查阅父目录 README。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# training/core/src/cy_exec/training/worker
+
+Yield 训练源码目录。
+
+## 文件
+
+| 条目 | 职责 |
+|---|---|
+| training/core/src/cy_exec/training/worker/__init__.py | 包初始化与公开导入边界。 |
+| training/core/src/cy_exec/training/worker/__main__.py | Python 实现或测试模块：__main__.py。 |
+| training/core/src/cy_exec/training/worker/cli.py | Python 实现或测试模块：cli.py。 |
+
+## 推荐阅读顺序
+
+先阅读 training/core/src/cy_exec/training/worker/__init__.py，再沿包入口或导入关系继续阅读。
+按 runtime 顺序阅读同级模块；职责边界请参见父目录 README。
