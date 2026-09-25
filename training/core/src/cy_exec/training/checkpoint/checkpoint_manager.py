@@ -6,15 +6,15 @@ but no Cyrene metadata file.
 
 检查点保存、发现、校验、加载与清理。
 
-规范实现从 Pro CheckpointManager 迁移而来，并增加发现 HuggingFace / LLaMA-Factory checkpoint-* 目录的能力；即使其中有权重但没有 Cyrene 元数据文件，也可以发现。
+规范实现从 Pro CheckpointManager 迁移而来,并增加发现 HuggingFace / LLaMA-Factory checkpoint-* 目录的能力;即使其中有权重但没有 Cyrene 元数据文件,也可以发现。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/checkpoint/checkpoint_manager.py
-# │ 中文：文件：training/core/src/cy_exec/training/checkpoint/checkpoint_manager.py
+# │ 中文:文件:training/core/src/cy_exec/training/checkpoint/checkpoint_manager.py
 # │ Module: training/core/src/cy_exec/training/checkpoint/checkpoint_manager
-# │ 模块：training/core/src/cy_exec/training/checkpoint/checkpoint_manager
+# │ 模块:training/core/src/cy_exec/training/checkpoint/checkpoint_manager
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
-# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -56,10 +56,10 @@ class CheckpointInfo:
 
 # ════════════════════════════════════════════════════════════════════════
 # 🔧 CLASS: CheckpointManager
-# 🔧 类：CheckpointManager
+# 🔧 类:CheckpointManager
 #
 #   Validates checkpoint contents, computes stable digests, and publishes
-#   校验 checkpoint 内容、计算稳定摘要，并发布
+#   校验 checkpoint 内容、计算稳定摘要,并发布
 #   verified artifact references for completed training attempts.
 #   已完成训练 attempt 的已验证制品引用。
 #
@@ -152,7 +152,7 @@ class CheckpointManager:
     def find_latest_training_dir(self) -> Optional[str]:
         """Latest checkpoint-* directory, with or without Cyrene metadata.
 
-        最新的 checkpoint-* 目录，不论是否包含 Cyrene 元数据。
+        最新的 checkpoint-* 目录,不论是否包含 Cyrene 元数据。
         """
 
         discovered = self.list_training_dirs()

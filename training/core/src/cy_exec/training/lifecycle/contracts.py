@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/lifecycle/contracts.py
-# ║ 文件：training/core/src/cy_exec/training/lifecycle/contracts.py
+# ║ 文件:training/core/src/cy_exec/training/lifecycle/contracts.py
 # ║ Module: Cyrene Yield
-# ║ 模块：Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Product-owned training run and attempt state.
-# ║ 职责：Product 所有的训练 run 与 attempt 状态。
+# ║ 职责:Product 所有的训练 run 与 attempt 状态。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：训练产品拥有的运行与尝试状态。
@@ -17,7 +17,7 @@ Operations.
 
 Yield 所有的训练生命周期契约。
 
-这些类型位于 Kernel Operation 之上。Product 将意图编译为 ExecutionPlan，每个 PlanStep 随后可由通用 Kernel Operation 实现。
+这些类型位于 Kernel Operation 之上。Product 将意图编译为 ExecutionPlan,每个 PlanStep 随后可由通用 Kernel Operation 实现。
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ AttemptNumber = NewType("AttemptNumber", int)
 
 
 # Invariant: Generation is a strictly monotonic counter incremented by the Reconciler
-# 不变量：Generation 是由 Reconciler 严格递增的计数器，
+# 不变量:Generation 是由 Reconciler 严格递增的计数器,
 # upon each state change or retry. It prevents stale asynchronous completion events from
 # 每次状态变化或重试时都会递增。它可防止过期的异步完成事件
 # a previous Attempt or zombie worker from overwriting the observed status of a newer Attempt.
@@ -48,9 +48,9 @@ AttemptNumber = NewType("AttemptNumber", int)
 Generation = NewType("Generation", int)
 
 # Invariant: IdempotencyKey ensures that re-submitted Product intent produces the exact
-# 不变量：IdempotencyKey 确保重复提交的 Product 意图生成完全相同的
+# 不变量:IdempotencyKey 确保重复提交的 Product 意图生成完全相同的
 # same ExecutionPlan without creating duplicate concurrent runs or leaked resource leases.
-# ExecutionPlan，且不会创建并发重复 run 或泄漏资源租约。
+# ExecutionPlan,且不会创建并发重复 run 或泄漏资源租约。
 IdempotencyKey = NewType("IdempotencyKey", str)
 
 
@@ -122,7 +122,7 @@ class StepDependency:
 class RetryPolicy:
     """Retry bounds are per generic plan step, with the first try included.
 
-    重试次数上限按通用计划步骤计算，包含首次尝试。
+    重试次数上限按通用计划步骤计算,包含首次尝试。
     """
 
     max_attempts: int = 1
@@ -282,7 +282,7 @@ class ExecutionPlan:
     def ordered_steps(self) -> Tuple[PlanStep, ...]:
         """Return a deterministic topological order while preserving declared order.
 
-        返回确定性的拓扑顺序，同时保持声明顺序。
+        返回确定性的拓扑顺序,同时保持声明顺序。
         """
 
         remaining = {step.step_id: step for step in self.steps}

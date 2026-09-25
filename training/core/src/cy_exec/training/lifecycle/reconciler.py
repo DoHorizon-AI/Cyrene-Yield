@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/lifecycle/reconciler.py
-# ║ 文件：training/core/src/cy_exec/training/lifecycle/reconciler.py
+# ║ 文件:training/core/src/cy_exec/training/lifecycle/reconciler.py
 # ║ Module: Cyrene Yield
-# ║ 模块：Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Product-owned training reconciliation policy.
-# ║ 职责：Product 所有的训练 reconciliation 策略。
+# ║ 职责:Product 所有的训练 reconciliation 策略。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：训练产品拥有的协调策略。
@@ -60,7 +60,7 @@ class ReconcileAction:
 class ProductReconciler:
     """Pure policy: compare desired state to observations and choose one next action.
 
-    纯策略逻辑：比较期望状态与观测结果，并选择一个下一步动作。
+    纯策略逻辑:比较期望状态与观测结果,并选择一个下一步动作。
     """
 
     def next_action(self, plan: ExecutionPlan, run: ProductRun) -> ReconcileAction:
@@ -203,8 +203,8 @@ class ProductControlPlane:
         checkpoint are resumed by the owning Product; this method performs the
         generic state transition and keeps all previous Attempts immutable.
 
-        只有仍持有完整 checkpoint 的终态或 awaiting-retry run 才能由所属 Product 恢复；
-        此方法执行通用状态转换并追加一个新 Attempt，所有历史 Attempt 均保持不可变。
+        只有仍持有完整 checkpoint 的终态或 awaiting-retry run 才能由所属 Product 恢复;
+        此方法执行通用状态转换并追加一个新 Attempt,所有历史 Attempt 均保持不可变。
         """
 
         run = self._store.load_run(run_id)

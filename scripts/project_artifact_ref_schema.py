@@ -21,7 +21,7 @@ TRAINING_RUN_SCHEMA = "contracts/product/v1/training-run.schema.json"
 
 
 def _git_show(repository: Path, revision: str, path: str) -> bytes:
-    """Read one immutable source object without modifying Platform. | 读取一个不可变的源对象，不修改 Platform。"""
+    """Read one immutable source object without modifying Platform. | 读取一个不可变的源对象,不修改 Platform。"""
 
     return subprocess.check_output(["git", "-C", str(repository), "show", f"{revision}:{path}"])
 

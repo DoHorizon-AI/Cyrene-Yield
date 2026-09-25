@@ -65,7 +65,7 @@ from .product_store import ProductStore
 _RESUMABLE_STATES = frozenset({PlanStatus.FAILED, PlanStatus.CANCELLED, PlanStatus.AWAITING_RETRY})
 _TERMINAL_RUN_STATES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 # One diagnostics page is capped by both record count and serialized size, so a
-# 每个诊断分页同时受记录数和序列化字节数限制，因此
+# 每个诊断分页同时受记录数和序列化字节数限制,因此
 # console poll can never pull an unbounded payload.
 # 控制台轮询不会获取无界 payload。
 DIAGNOSTICS_PAGE_LIMIT = 500
@@ -97,7 +97,7 @@ def _json(resource: Any) -> dict[str, Any]:
 class YieldService:
     """Yield owns drafts/results; TrainingControlPlane remains the run state store.
 
-    Yield 拥有 drafts 与 results；TrainingControlPlane 仍是 run 状态存储。
+    Yield 拥有 drafts 与 results;TrainingControlPlane 仍是 run 状态存储。
     """
 
     def __init__(
@@ -132,7 +132,7 @@ class YieldService:
     def create_draft(self, command: CreateTrainingDraft, key: str | None = None) -> TrainingDraft:
         """Persist only references; importing never allocates compute or starts work.
 
-        只持久化引用；导入不会分配计算资源或启动工作。
+        只持久化引用;导入不会分配计算资源或启动工作。
         """
         identifier = uuid4()
         draft = TrainingDraft(
@@ -166,7 +166,7 @@ class YieldService:
     ) -> TrainingRunPage:
         """Return a deterministic offset page without exposing executor state.
 
-        返回确定性的 offset 分页，不暴露 executor 状态。
+        返回确定性的 offset 分页,不暴露 executor 状态。
         """
 
         if not 0 <= offset:
@@ -474,7 +474,7 @@ class YieldService:
     def events(self, identifier: UUID, *, after_sequence: int = 0, limit: int = 5000) -> TrainingEventsPage:
         """Harvest runtime events and return a durable ordered slice.
 
-        采集 runtime 事件，并返回持久化的有序切片。
+        采集 runtime 事件,并返回持久化的有序切片。
         """
 
         if after_sequence < 0:
@@ -498,7 +498,7 @@ class YieldService:
     ) -> DiagnosticsPage:
         """Harvest trainer output and return a durable, redacted page.
 
-        采集 trainer 输出，并返回持久化且已脱敏的分页。
+        采集 trainer 输出,并返回持久化且已脱敏的分页。
         """
 
         if after_sequence < 0:
@@ -594,7 +594,7 @@ class YieldService:
     ) -> TrainingRunResource:
         """Stage a verified checkpoint and append one explicit Attempt.
 
-        暂存已验证的 checkpoint，并追加一个明确的 Attempt。
+        暂存已验证的 checkpoint,并追加一个明确的 Attempt。
         """
 
         with self._lock:
@@ -640,7 +640,7 @@ class YieldService:
     ) -> GatewayRouteDraftReceipt:
         """Create, but never confirm, an Exchange Route Draft for a result.
 
-        为一个结果创建 Exchange Route Draft，但绝不确认该 draft。
+        为一个结果创建 Exchange Route Draft,但绝不确认该 draft。
         """
 
         result = self.get_result(identifier)
@@ -698,7 +698,7 @@ class YieldService:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Read the Reactor source before sending its versioned reference to Exchange.
 
-        将 Reactor 来源读取后，再向 Exchange 发送其版本化引用。
+        将 Reactor 来源读取后,再向 Exchange 发送其版本化引用。
         """
 
         if self.reactor_url is None:
@@ -805,7 +805,7 @@ class YieldService:
     def _register_model_version(self, result: TrainingResultResource) -> None:
         """Publish once when configured; Artifact bytes remain in the Artifact Plane.
 
-        配置后只发布一次；Artifact 字节仍留在 Artifact Plane。
+        配置后只发布一次;Artifact 字节仍留在 Artifact Plane。
         """
         if self.model_registry is None:
             return
@@ -836,7 +836,7 @@ class YieldService:
     def list_attempts(self, identifier: UUID) -> list[TrainingAttemptResource]:
         """Expose stable phase diagnostics without leaking host paths or raw logs.
 
-        暴露稳定的阶段诊断，不泄漏主机路径或原始日志。
+        暴露稳定的阶段诊断,不泄漏主机路径或原始日志。
         """
         self._draft_for_run(identifier)
         run = self.control.load("run-" + str(identifier))
@@ -933,7 +933,7 @@ def _preflight_item_status(severity: PreflightSeverity) -> Literal["PASS", "WARN
 def _filesystem_preflight(output_dir: str) -> list[PreflightItem]:
     """Check the output parent without returning its private path.
 
-    检查输出目录的父级，但不返回其私有路径。
+    检查输出目录的父级,但不返回其私有路径。
     """
 
     target = Path(output_dir)
@@ -998,7 +998,7 @@ def _private_paths(spec: TrainingSpec | None, state_directory: Path) -> tuple[st
 def _bounded_diagnostics(items: list[DiagnosticRecord]) -> tuple[list[DiagnosticRecord], bool]:
     """Trim a page to the serialized byte budget; report whether it was trimmed.
 
-    将分页裁剪到序列化字节上限，并报告是否发生裁剪。
+    将分页裁剪到序列化字节上限,并报告是否发生裁剪。
     """
 
     if not items:

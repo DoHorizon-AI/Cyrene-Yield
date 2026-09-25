@@ -34,7 +34,7 @@ def publish_adapter(
     The trainer resolved the immutable base into a private directory. Replace
     that transport location with its selected immutable upstream identity in
     the exported PEFT configuration; all PEFT tuning facts remain untouched.
-    中文：只发布 PEFT 配置和权重，不发布 trainer workspace。trainer 将不可变基座解析到私有目录后，在导出的 PEFT 配置中用所选的不可变上游身份替换该传输路径；所有 PEFT 调参事实保持不变。
+    中文:只发布 PEFT 配置和权重,不发布 trainer workspace。trainer 将不可变基座解析到私有目录后,在导出的 PEFT 配置中用所选的不可变上游身份替换该传输路径;所有 PEFT 调参事实保持不变。
     """
     for name in ADAPTER_MEMBERS:
         path = output / name

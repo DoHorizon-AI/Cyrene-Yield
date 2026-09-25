@@ -6,15 +6,15 @@ authority is a stable, fail-closed Product outcome.
 
 在显式配置 Platform executor 的基础上实现 Product 训练 runtime。
 
-Yield 拥有 Product run 与 attempt 映射。如果缺少 Platform 执行适配器，它绝不启动本地进程树；缺少执行权威时会返回稳定且 fail-closed 的 Product 结果。
+Yield 拥有 Product run 与 attempt 映射。如果缺少 Platform 执行适配器,它绝不启动本地进程树;缺少执行权威时会返回稳定且 fail-closed 的 Product 结果。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/runtime.py
-# │ 中文：文件：training/core/src/cy_exec/training/runtime.py
+# │ 中文:文件:training/core/src/cy_exec/training/runtime.py
 # │ Module: training/core/src/cy_exec/training/runtime
-# │ 模块：training/core/src/cy_exec/training/runtime
+# │ 模块:training/core/src/cy_exec/training/runtime
 # │ Role: Product training coordination over explicit Platform execution.
-# │ 职责：基于显式 Platform 执行的 Product 训练协调。
+# │ 职责:基于显式 Platform 执行的 Product 训练协调。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -88,7 +88,7 @@ class TrainingSession:
 
 # ════════════════════════════════════════════════════════════════════════
 # 🔧 CLASS: TrainingRuntime
-# 🔧 类：TrainingRuntime
+# 🔧 类:TrainingRuntime
 #
 #   Coordinates product training attempts, engine adapters, executors, event
 #   协调 Product 训练 attempt、引擎适配器、executor、事件
@@ -212,7 +212,7 @@ class TrainingRuntime:
                     if attempt.events is not session.events:
                         attempt.events.append(event)
         # Diagnostics ride alongside events: the raw stream is a separate copy
-        # 诊断记录与事件并行传递：原始流是独立副本，
+        # 诊断记录与事件并行传递:原始流是独立副本,
         # and never replaces the business event stream.
         # 绝不替代业务事件流。
         reader = getattr(executor, "read_new_diagnostics", None)
@@ -249,7 +249,7 @@ class TrainingRuntime:
                 )
         except (ArtifactError, OSError, ValueError) as exc:
             # A zero exit without publishable weights is a failed Product result.
-            # 进程退出码为零但没有可发布权重时，Product 结果仍为失败。
+            # 进程退出码为零但没有可发布权重时,Product 结果仍为失败。
             session.status = TrainingStatus.FAILED
             session.result.status = TrainingStatus.FAILED
             session.error = str(exc).split(":", 1)[0]
@@ -267,7 +267,7 @@ class TrainingRuntime:
     def restore_session(self, launch: TrainingLaunchSpec, handle: ProcessHandle) -> TrainingSession:
         """Restore a Kernel execution receipt without submitting or retrying work.
 
-        恢复 Kernel 执行回执，不提交或重试工作。
+        恢复 Kernel 执行回执,不提交或重试工作。
         """
         spec = TrainingSpec.from_dict(launch.extra["product_spec"])
         session_id = str(spec.job_id)
@@ -328,7 +328,7 @@ class TrainingRuntime:
     def resolve_environment_lock(self, spec: TrainingSpec):
         """Resolve once for Product orchestration without moving resolution into an engine.
 
-        仅解析一次，供 Product 编排使用，不将解析职责移入引擎。
+        仅解析一次,供 Product 编排使用,不将解析职责移入引擎。
         """
 
         return self._resolve_environment_lock(spec)
@@ -505,10 +505,10 @@ class TrainingRuntime:
         Raises:
             ExecutionControlError: If no Platform execution binding is configured.
 
-        返回已配置的 Platform 适配器，否则 fail closed。
+        返回已配置的 Platform 适配器,否则 fail closed。
 
-        返回：Product composition root 提供的显式执行端口。
-        抛出：未配置 Platform 执行绑定时抛出 ExecutionControlError。
+        返回:Product composition root 提供的显式执行端口。
+        抛出:未配置 Platform 执行绑定时抛出 ExecutionControlError。
         """
 
         if self._executor is None:

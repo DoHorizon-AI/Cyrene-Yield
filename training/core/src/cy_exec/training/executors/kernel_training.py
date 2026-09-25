@@ -34,7 +34,7 @@ from .kernel_rpc import KernelClient, context
 class KernelTrainingConfiguration(BaseModel):
     """Operator configuration, never accepted as a Product handoff payload.
 
-    运营方配置，不接受为 Product 交接 payload。
+    运营方配置,不接受为 Product 交接 payload。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -58,7 +58,7 @@ def _digest(value: bytes) -> str:
 class KernelTrainingExecutor:
     """Kernel owns process trees and leases; files are private execution receipts.
 
-    Kernel 拥有进程树与租约；文件是私有执行回执。
+    Kernel 拥有进程树与租约;文件是私有执行回执。
     """
 
     def __init__(self, configuration: KernelTrainingConfiguration, *, client: Any = None) -> None:
@@ -123,7 +123,7 @@ class KernelTrainingExecutor:
     def recover(self) -> list[tuple[TrainingLaunchSpec, ProcessHandle]]:
         """Restore existing receipt handles without acquiring another lease.
 
-        恢复现有回执句柄，不再获取新的租约。
+        恢复现有回执句柄,不再获取新的租约。
         """
         recovered = []
         with self._lock:
@@ -140,7 +140,7 @@ class KernelTrainingExecutor:
     def start(self, launch: TrainingLaunchSpec) -> ProcessHandle:
         """Acquire and start through Kernel; never spawn a training subprocess here.
 
-        通过 Kernel 获取租约并启动；不得在此启动训练子进程。
+        通过 Kernel 获取租约并启动;不得在此启动训练子进程。
         """
         try:
             facts = self._admit(launch)
@@ -335,7 +335,7 @@ class KernelTrainingExecutor:
     def poll(self, handle: ProcessHandle) -> int | None:
         """A trainer exit plus confirmed Kernel cleanup precedes terminal success.
 
-        只有 trainer 退出且 Kernel 确认清理后，状态才能进入终态成功。
+        只有 trainer 退出且 Kernel 确认清理后,状态才能进入终态成功。
         """
         with self._lock:
             receipt = self._receipt(handle)
@@ -435,9 +435,9 @@ class KernelTrainingExecutor:
                     receipt = json.loads(path.read_bytes())
                     if receipt["released"] or receipt["lease"] is None or not receipt.get("operation"):
                         # An uncertain start without an operation receipt must expire
-                        # 对于没有 operation 回执的不确定启动，必须在 Kernel TTL 到期后
+                        # 对于没有 operation 回执的不确定启动,必须在 Kernel TTL 到期后
                         # under Kernel TTL rather than retaining an orphan indefinitely.
-                        # 失效，不得无限期保留孤儿执行。
+                        # 失效,不得无限期保留孤儿执行。
                         continue
                     lease = receipt["lease"]
                     try:
@@ -457,7 +457,7 @@ class KernelTrainingExecutor:
     def close(self) -> None:
         """Stop renewing; Kernel TTL remains the execution authority.
 
-        停止续租；Kernel TTL 仍是执行权威。
+        停止续租;Kernel TTL 仍是执行权威。
         """
         self._stopping.set()
         self._renewal.join(timeout=20)

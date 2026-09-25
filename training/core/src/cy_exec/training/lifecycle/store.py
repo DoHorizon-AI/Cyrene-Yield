@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/lifecycle/store.py
-# ║ 文件：training/core/src/cy_exec/training/lifecycle/store.py
+# ║ 文件:training/core/src/cy_exec/training/lifecycle/store.py
 # ║ Module: Cyrene Yield
-# ║ 模块：Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Product-owned training lifecycle persistence.
-# ║ 职责：Product 所有的训练生命周期持久化。
+# ║ 职责:Product 所有的训练生命周期持久化。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：训练产品拥有的生命周期持久化。

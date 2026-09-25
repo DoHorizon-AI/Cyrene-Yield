@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/plugin_preflight.py     ║
-# ║ 文件：training/core/src/cy_exec/training/plugin_preflight.py     ║
+# ║ 文件:training/core/src/cy_exec/training/plugin_preflight.py     ║
 # ║ Module: Cyrene Yield                                                ║
-# ║ 模块：Cyrene Yield                                                ║
+# ║ 模块:Cyrene Yield                                                ║
 # ║ Role: Direct adapters for Plugins-owned preflight capabilities.     ║
-# ║ 职责：面向 Plugins 所有 preflight 能力的直连适配器。
+# ║ 职责:面向 Plugins 所有 preflight 能力的直连适配器。
 # ║                                                                    ║
 # ║ 模块：Cyrene Yield                                                  ║
 # ║ 职责：连接由 Plugins 实现的前置分析能力，不承载能力实现。                 ║

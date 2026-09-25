@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/preflight_contracts.py
-# ║ 文件：training/core/src/cy_exec/training/preflight_contracts.py
+# ║ 文件:training/core/src/cy_exec/training/preflight_contracts.py
 # ║ Module: Cyrene Yield
-# ║ 模块：Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Product-owned model analysis and training compatibility ports.
-# ║ 职责：Product 所有的模型分析与训练兼容性端口。
+# ║ 职责:Product 所有的模型分析与训练兼容性端口。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：由产品拥有的模型分析与训练兼容性端口。

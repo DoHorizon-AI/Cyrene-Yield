@@ -117,7 +117,7 @@ def test_api_traceparent_and_error_handling():
             req_id = "req-yield-test-999"
 
             # Request non-existent draft to trigger 404 failure ProblemDetails
-            # 请求不存在的 draft，以触发 404 失败 ProblemDetails。
+            # 请求不存在的 draft,以触发 404 失败 ProblemDetails。
             res = client.get(
                 "/api/v1/training-drafts/00000000-0000-0000-0000-000000000001",
                 headers={"traceparent": traceparent, "x-request-id": req_id},

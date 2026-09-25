@@ -56,14 +56,14 @@ EXECUTION_RECOVERY_UNAVAILABLE = "EXECUTION_RECOVERY_UNAVAILABLE"
 class TrainingStateRecoveryError(RuntimeError):
     """Persisted Product state cannot be restored without changing intent.
 
-    如果恢复持久化 Product 状态会改变意图，则拒绝恢复。
+    如果恢复持久化 Product 状态会改变意图,则拒绝恢复。
     """
 
 
 class TrainingPlanCompiler:
     """Compiles TrainingSpec into generic PlanSteps without changing engine execution.
 
-    将 TrainingSpec 编译为通用 PlanSteps，不改变引擎执行。
+    将 TrainingSpec 编译为通用 PlanSteps,不改变引擎执行。
     """
 
     def compile(self, spec: TrainingSpec, environment_lock: EnvironmentLock) -> ExecutionPlan:
@@ -249,7 +249,7 @@ class TrainingControlPlane:
     def resume(self, run_id: str, *, checkpoint_path: str, step_id: str = REAL_TRAINING_STEP_ID) -> ProductRun:
         """Resume a stopped ProductRun from a complete checkpoint as a new Attempt.
 
-        基于完整 checkpoint，将已停止的 ProductRun 作为新 Attempt 恢复。
+        基于完整 checkpoint,将已停止的 ProductRun 作为新 Attempt 恢复。
         """
 
         if not checkpoint_path or not Path(checkpoint_path).exists():
@@ -282,7 +282,7 @@ class TrainingControlPlane:
 
         返回最近一次真实 Attempt 的 checkpoint 制品。
 
-        Checkpoint 身份从持久化 Attempt 元数据读取，而不是从私有输出路径读取，因此控制进程重启后仍可验证恢复请求。
+        Checkpoint 身份从持久化 Attempt 元数据读取,而不是从私有输出路径读取,因此控制进程重启后仍可验证恢复请求。
         """
 
         artifacts = self.output_artifacts(run_id)
@@ -295,7 +295,7 @@ class TrainingControlPlane:
     def reconcile_once(self, run_id: str) -> ProductRun:
         """Perform one Product action; callers decide polling cadence.
 
-        执行一次 Product 操作；轮询频率由调用方决定。
+        执行一次 Product 操作;轮询频率由调用方决定。
         """
 
         action = self._control.next_action(run_id)

@@ -28,7 +28,7 @@ from cyrene_preflight import AcceleratorFacts, HardwareFacts
 class AdapterFixtureExecutor:
     """Unit fixture only: no training or GPU evidence is claimed by these bytes.
 
-    仅用于单元测试的 fixture；这些字节不代表训练或 GPU 验收证据。
+    仅用于单元测试的 fixture;这些字节不代表训练或 GPU 验收证据。
     """
 
     def __init__(self, *, broken=False):

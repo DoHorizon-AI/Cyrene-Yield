@@ -45,7 +45,7 @@ class _EventExecutor(AdapterFixtureExecutor):
 class _ResumeExecutor(AdapterFixtureExecutor):
     """Fail the first real attempt after publishing a usable checkpoint.
 
-    在发布可用 checkpoint 后，让第一个真实 attempt 失败。
+    在发布可用 checkpoint 后,让第一个真实 attempt 失败。
     """
 
     def start(self, launch):

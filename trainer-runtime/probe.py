@@ -80,7 +80,7 @@ def _protocol(repository: Path) -> dict[str, Any]:
 def probe(repository: Path, *, require_cuda: bool = True) -> dict[str, Any]:
     """Validate the installed runtime without loading a model or allocating VRAM.
 
-    验证已安装的 runtime，不加载模型或分配 VRAM。
+    验证已安装的 runtime,不加载模型或分配 VRAM。
     """
 
     versions = _versions()

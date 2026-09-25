@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/tests/test_lifecycle_core.py
-# ║ 文件：training/core/tests/test_lifecycle_core.py
+# ║ 文件:training/core/tests/test_lifecycle_core.py
 # ║ Module: Cyrene Yield
-# ║ 模块：Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Python SDK, TCK, or test module for this repository boundary.
-# ║ 职责：此仓库边界的 Python SDK、TCK 或测试模块。
+# ║ 职责:此仓库边界的 Python SDK、TCK 或测试模块。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：Python SDK、TCK 或测试模块。

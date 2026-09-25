@@ -25,7 +25,7 @@ class ContractModel(PydanticModel):
 class ArtifactRef(ContractModel):
     """Projection of Platform ArtifactRef; identity is validated by its SDK.
 
-    Platform ArtifactRef 的映射；身份由其 SDK 验证。
+    Platform ArtifactRef 的映射;身份由其 SDK 验证。
     """
 
     model_config = ConfigDict(alias_generator=None, populate_by_name=True, extra="forbid")
@@ -233,7 +233,7 @@ class HandoffReceipt(ContractModel):
 class TrainingAttemptResource(ContractModel):
     """Public diagnostic projection; executor paths stay private.
 
-    公开诊断映射；executor 路径保持私有。
+    公开诊断映射;executor 路径保持私有。
     """
 
     id: UUID
@@ -291,7 +291,7 @@ class DiagnosticRecord(ContractModel):
 
     控制台可以直接展示的一条脱敏诊断行。
 
-    原始 trainer 输出绝不会发送到浏览器：消息在写入时脱敏，分页中也不包含路径、凭证或环境内容。
+    原始 trainer 输出绝不会发送到浏览器:消息在写入时脱敏,分页中也不包含路径、凭证或环境内容。
     """
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")

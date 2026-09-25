@@ -81,7 +81,7 @@ def create_app(
 ) -> FastAPI:
     """Build the Product independently; live training requires an explicit Kernel binding.
 
-    独立构建 Product；实时训练需要显式配置 Kernel 绑定。
+    独立构建 Product;实时训练需要显式配置 Kernel 绑定。
     """
     state_directory.mkdir(parents=True, exist_ok=True)
     owner = (state_directory / "product.lock").open("a")
@@ -157,7 +157,7 @@ def create_app(
             purge_task.cancel()
             stopped.set()
             # Finish the current bounded RPC or Artifact publication before
-            # 在关闭其 store 并允许另一个 Product writer 进入前，
+            # 在关闭其 store 并允许另一个 Product writer 进入前,
             # closing its store and allowing another Product writer.
             # 先完成当前有界 RPC 或 Artifact 发布。
             worker.join()

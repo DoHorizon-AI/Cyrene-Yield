@@ -21,7 +21,7 @@ from uuid import UUID
 class ProductStore:
     """Serialize only Yield resources; never store model or dataset content.
 
-    只序列化 Yield 资源；绝不存储模型或数据集内容。
+    只序列化 Yield 资源;绝不存储模型或数据集内容。
     """
 
     LOG_SIZE_LIMIT_BYTES = 100 * 1024 * 1024  # 100 MiB
@@ -115,7 +115,7 @@ class ProductStore:
     def create_result(self, document: dict[str, Any]) -> dict[str, Any]:
         """Keep the first immutable result when reconciliation and reads race.
 
-        reconciliation 和读取发生竞争时，保留最早的不可变结果。
+        reconciliation 和读取发生竞争时,保留最早的不可变结果。
         """
         with self._lock, self._connection:
             self._connection.execute(
@@ -288,7 +288,7 @@ class ProductStore:
     def recall_receipt(self, key: str, digest: str) -> dict[str, Any] | None:
         """Resolve one durable action receipt or reject conflicting reuse.
 
-        解析一个持久化操作回执，或拒绝冲突的重复使用。
+        解析一个持久化操作回执,或拒绝冲突的重复使用。
         """
 
         with self._lock:
@@ -304,7 +304,7 @@ class ProductStore:
     def save_receipt(self, key: str, digest: str, document: dict[str, Any]) -> dict[str, Any]:
         """Persist an action receipt for later idempotent replay.
 
-        持久化操作回执，以供后续幂等重放。
+        持久化操作回执,以供后续幂等重放。
         """
 
         with self._lock, self._connection:

@@ -8,11 +8,11 @@ Product 级训练生命周期状态。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/status.py
-# │ 中文：文件：training/core/src/cy_exec/training/contracts/status.py
+# │ 中文:文件:training/core/src/cy_exec/training/contracts/status.py
 # │ Module: training/core/src/cy_exec/training/contracts/status
-# │ 模块：training/core/src/cy_exec/training/contracts/status
+# │ 模块:training/core/src/cy_exec/training/contracts/status
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
-# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -30,7 +30,7 @@ class TrainingStatus(str, Enum):
 
     由 TrainingRuntime 拥有的规范 Product 作业状态。
 
-    Attempt 状态可以包含 LOST。丢失的 Attempt 不得改写为成功的 TrainingRun；是否重试由 controller 决定。
+    Attempt 状态可以包含 LOST。丢失的 Attempt 不得改写为成功的 TrainingRun;是否重试由 controller 决定。
     """
 
     QUEUED = "queued"
@@ -55,7 +55,7 @@ class EngineKind(str, Enum):
 class DistributedStrategy(str, Enum):
     """Training strategy chosen by an Engine, not by the Executor.
 
-    由 Engine 选择的训练策略，不由 Executor 选择。
+    由 Engine 选择的训练策略,不由 Executor 选择。
     """
 
     SINGLE = "single"
@@ -73,7 +73,7 @@ class LaunchKind(str, Enum):
 
     编译后的命令应如何启动。
 
-    这仍由训练引擎决定（直接运行 Python，还是使用 torchrun wrapper）。Executor 只负责启动生成的 argv/进程树。
+    这仍由训练引擎决定(直接运行 Python,还是使用 torchrun wrapper)。Executor 只负责启动生成的 argv/进程树。
     """
 
     DIRECT = "direct"

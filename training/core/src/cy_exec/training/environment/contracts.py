@@ -36,7 +36,7 @@ def _mapping(value: Mapping[str, str]) -> Dict[str, str]:
 class EnvironmentSpec:
     """Requirements for an environment, not observations of a host.
 
-    描述环境需求，而不是主机观测结果。
+    描述环境需求,而不是主机观测结果。
     """
 
     runtime_profile: Optional[str] = None

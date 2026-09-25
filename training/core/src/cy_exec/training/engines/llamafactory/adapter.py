@@ -58,7 +58,7 @@ class LlamaFactoryPluginConnection:
     def invoke(self, method: str, request: dict[str, Any]) -> dict[str, Any]:
         """Invoke one typed JSON method and decode only capability-owned bytes.
 
-        调用一个有类型的 JSON 方法，只解码该能力所有的字节。
+        调用一个有类型的 JSON 方法,只解码该能力所有的字节。
         """
         request_type_url = f"type.cyrene.io/{CAPABILITY_ID}.{method}.request"
         response = self._client.invoke(

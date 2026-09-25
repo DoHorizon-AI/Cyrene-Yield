@@ -41,7 +41,7 @@ class ModelRegistration:
 class ModelRegistryPort(Protocol):
     """Yield application port; registry implementations remain Plugins-owned.
 
-    Yield 应用端口；registry 实现仍由 Plugins 所有。
+    Yield 应用端口;registry 实现仍由 Plugins 所有。
     """
 
     def register(
@@ -52,7 +52,7 @@ class ModelRegistryPort(Protocol):
     ) -> ModelRegistration:
         """Register an immutable descriptor without transferring Artifact bytes.
 
-        注册不可变描述符，不转移 Artifact 字节。
+        注册不可变描述符,不转移 Artifact 字节。
         """
 
 

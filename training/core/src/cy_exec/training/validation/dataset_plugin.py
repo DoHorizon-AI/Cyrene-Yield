@@ -197,7 +197,7 @@ class UnavailableDatasetValidator:
 def dataset_validator_from_environment() -> DatasetValidationPort:
     """Resolve the direct adapter or a stable fail-closed projection.
 
-    解析直连适配器，或返回稳定的 fail-closed 映射。
+    解析直连适配器,或返回稳定的 fail-closed 映射。
     """
 
     try:

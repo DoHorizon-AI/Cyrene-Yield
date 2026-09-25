@@ -6,15 +6,15 @@ but are not part of this contract.
 
 TrainingEngineAdapter 协议。
 
-适配器负责检查、验证和编译，不得拥有 Product 作业状态。旧引擎可能为兼容性保留 launch/status/cancel，但这些方法不属于本契约。
+适配器负责检查、验证和编译,不得拥有 Product 作业状态。旧引擎可能为兼容性保留 launch/status/cancel,但这些方法不属于本契约。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/adapter.py
-# │ 中文：文件：training/core/src/cy_exec/training/contracts/adapter.py
+# │ 中文:文件:training/core/src/cy_exec/training/contracts/adapter.py
 # │ Module: training/core/src/cy_exec/training/contracts/adapter
-# │ 模块：training/core/src/cy_exec/training/contracts/adapter
+# │ 模块:training/core/src/cy_exec/training/contracts/adapter
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
-# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘

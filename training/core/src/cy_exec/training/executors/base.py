@@ -4,11 +4,11 @@ Executor 协议。具体 executor 不得泄漏到 TrainingLaunchSpec 中。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/executors/base.py
-# │ 中文：文件：training/core/src/cy_exec/training/executors/base.py
+# │ 中文:文件:training/core/src/cy_exec/training/executors/base.py
 # │ Module: training/core/src/cy_exec/training/executors/base
-# │ 模块：training/core/src/cy_exec/training/executors/base
+# │ 模块:training/core/src/cy_exec/training/executors/base
 # │ Role: Product execution port shared by Platform-backed adapters.
-# │ 职责：Platform 执行适配器共用的 Product 执行端口。
+# │ 职责:Platform 执行适配器共用的 Product 执行端口。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -49,7 +49,7 @@ class CancelOutcome:
 class ProcessHandle:
     """Runtime handle for a launched process tree. Not part of the product contract.
 
-    已启动进程树的 runtime 句柄，不属于 Product 契约。
+    已启动进程树的 runtime 句柄,不属于 Product 契约。
     """
 
     pid: int

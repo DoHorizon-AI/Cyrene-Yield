@@ -1,10 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/lifecycle/__init__.py
-# ║ 文件：training/core/src/cy_exec/training/lifecycle/__init__.py
+# ║ 文件:training/core/src/cy_exec/training/lifecycle/__init__.py
 # ║ Module: Cyrene Yield
-# ║ 模块：Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Product-owned training lifecycle implementation.
-# ║ 职责：Product 所有的训练生命周期实现。
+# ║ 职责:Product 所有的训练生命周期实现。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：训练产品拥有的生命周期实现。

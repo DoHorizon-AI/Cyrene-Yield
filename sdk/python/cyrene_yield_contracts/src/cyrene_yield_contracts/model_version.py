@@ -344,7 +344,7 @@ class ModelVersion:
 
     供 Product 契约使用的不可变规范模型组合。
 
-    此 helper 仅拥有内容寻址描述符。TrainingRun 由 Yield 拥有，DatasetVersion 由 Catalyst 拥有；两者在此仅作为不透明的 lineage 引用。LoRA rank、alpha 和 target modules 保留在 adapter payload 中，并有意不纳入此描述符。
+    此 helper 仅拥有内容寻址描述符。TrainingRun 由 Yield 拥有,DatasetVersion 由 Catalyst 拥有;两者在此仅作为不透明的 lineage 引用。LoRA rank、alpha 和 target modules 保留在 adapter payload 中,并有意不纳入此描述符。
     """
 
     _payload: Mapping[str, Any] = field(repr=False, compare=False)

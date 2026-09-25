@@ -4,11 +4,11 @@
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/tiny_dry_run.py
-# │ 中文：文件：training/core/src/cy_exec/training/tiny_dry_run.py
+# │ 中文:文件:training/core/src/cy_exec/training/tiny_dry_run.py
 # │ Module: training/core/src/cy_exec/training/tiny_dry_run
-# │ 模块：training/core/src/cy_exec/training/tiny_dry_run
+# │ 模块:training/core/src/cy_exec/training/tiny_dry_run
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
-# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -87,12 +87,12 @@ class TinyDryRunResult:
 
 # ════════════════════════════════════════════════════════════════════════
 # 🔧 CLASS: TinyDryRun
-# 🔧 类：TinyDryRun
+# 🔧 类:TinyDryRun
 #
 #   Executes the minimal training gate that validates the selected engine and
-#   执行最小训练门禁，验证所选引擎和
+#   执行最小训练门禁,验证所选引擎和
 #   workload path before full training is admitted.
-#   工作负载路径，然后才允许完整训练。
+#   工作负载路径,然后才允许完整训练。
 #
 #   执行最小训练门禁，在准入完整训练前验证选定引擎与工作负载路径。
 #
@@ -161,7 +161,7 @@ class TinyDryRun:
     def cancel(self, session_id: str, timeout: float = 15.0) -> TrainingSession:
         """Reuse runtime cancellation; terminal cancellation still needs tree cleanup.
 
-        复用 runtime 取消流程；进入终态前仍需清理进程树。
+        复用 runtime 取消流程;进入终态前仍需清理进程树。
         """
 
         return self._runtime.cancel(session_id, timeout=timeout)

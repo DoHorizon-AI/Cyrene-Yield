@@ -89,7 +89,7 @@ def sanitize_resource_id(raw: str | None) -> str | None:
 def parse_w3c_traceparent(raw: str | None) -> tuple[str, str] | None:
     """Validate and parse a W3C traceparent header into (trace_id, span_id).
 
-    校验并解析 W3C traceparent header，得到 (trace_id, span_id)。
+    校验并解析 W3C traceparent header,得到 (trace_id, span_id)。
     """
     if not raw:
         return None

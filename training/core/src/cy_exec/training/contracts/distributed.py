@@ -6,15 +6,15 @@ belongs to the Executor / future Kernel, never this contract.
 
 训练作业所请求的分布式拓扑。
 
-此处描述 rank 数量及其分组方式，不负责分配物理 GPU。设备可见性（例如 CUDA_VISIBLE_DEVICES）属于 Executor 或未来的 Kernel，不属于此契约。
+此处描述 rank 数量及其分组方式,不负责分配物理 GPU。设备可见性(例如 CUDA_VISIBLE_DEVICES)属于 Executor 或未来的 Kernel,不属于此契约。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/distributed.py
-# │ 中文：文件：training/core/src/cy_exec/training/contracts/distributed.py
+# │ 中文:文件:training/core/src/cy_exec/training/contracts/distributed.py
 # │ Module: training/core/src/cy_exec/training/contracts/distributed
-# │ 模块：training/core/src/cy_exec/training/contracts/distributed
+# │ 模块:training/core/src/cy_exec/training/contracts/distributed
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
-# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -32,7 +32,7 @@ from .status import DistributedStrategy
 class DistributedSpec:
     """GPU topology and world size. No machine-level device assignment.
 
-    GPU 拓扑与 world size，不包含机器级设备分配。
+    GPU 拓扑与 world size,不包含机器级设备分配。
     """
 
     gpu_count: int = 1

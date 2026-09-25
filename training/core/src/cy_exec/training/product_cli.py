@@ -28,7 +28,7 @@ TRAINER_PROFILE = "CYRENE_YIELD_TRAINER_V1_CUDA128"
 def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
     """Read one private READY manifest and enforce its profile boundary.
 
-    读取一个私有 READY manifest，并强制执行其 profile 边界。
+    读取一个私有 READY manifest,并强制执行其 profile 边界。
     """
 
     if path.stat().st_mode & 0o077:
@@ -139,7 +139,7 @@ def _run_command(arguments: list[str]) -> int:
 def main() -> None:
     """Expose documented public APIs; operator paths never enter resource identities.
 
-    暴露文档中列出的公开 API；运营路径不会进入资源身份。
+    暴露文档中列出的公开 API;运营路径不会进入资源身份。
     """
     arguments = sys.argv[1:]
     if arguments and arguments[0] == "run":

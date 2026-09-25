@@ -6,15 +6,15 @@ below now guard the single checkpoint contract directly.
 
 规范 CheckpointManager 的属性测试。
 
-从已退役的 Pro package（cy_exec_pro.training.checkpoint）迁移而来。Pro 模块只是对此 core 权威实现的轻量 re-export，因此以下不变量现在直接保护唯一的 checkpoint 契约。
+从已退役的 Pro package(cy_exec_pro.training.checkpoint)迁移而来。Pro 模块只是对此 core 权威实现的轻量 re-export,因此以下不变量现在直接保护唯一的 checkpoint 契约。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/tests/test_checkpoint_manager_pbt.py
-# │ 中文：文件：training/core/tests/test_checkpoint_manager_pbt.py
+# │ 中文:文件:training/core/tests/test_checkpoint_manager_pbt.py
 # │ Module: training/core/tests/test_checkpoint_manager_pbt
-# │ 模块：training/core/tests/test_checkpoint_manager_pbt
+# │ 模块:training/core/tests/test_checkpoint_manager_pbt
 # │ Role: Yield core test module — verifies the unified training runtime and its contracts.
-# │ 职责：Yield 核心测试模块，验证统一训练 runtime 与契约。
+# │ 职责:Yield 核心测试模块,验证统一训练 runtime 与契约。
 # │
 # │ 模块职责：Yield 核心测试模块——验证统一训练运行时及其契约。
 # └─────────────────────────────────────────────────────────────────────┘

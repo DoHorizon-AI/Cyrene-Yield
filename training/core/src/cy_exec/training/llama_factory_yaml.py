@@ -19,7 +19,7 @@ from .product_models import LlamaFactoryPrefill, TrainingParameters
 # Only these LLaMA Factory fields are mapped to the canonical TrainingSpec.
 # 只有这些 LLaMA Factory 字段会映射到规范 TrainingSpec。
 # Anything else fails closed; silent ignoring would change training intent.
-# 其余字段一律 fail closed；静默忽略会改变训练意图。
+# 其余字段一律 fail closed;静默忽略会改变训练意图。
 ALLOWED_FIELDS = frozenset(
     {
         "model_name_or_path",

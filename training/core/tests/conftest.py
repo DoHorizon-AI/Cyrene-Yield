@@ -43,13 +43,13 @@ os.environ["PYTHONPATH"] = os.pathsep.join([*(str(source) for source in TEST_PYT
 class _LlamaFactoryContractFixture:
     """Offline launch-contract fixture; real training remains a Plugin acceptance lane.
 
-    离线 launch 契约 fixture；真实训练属于 Plugin 验收通道。
+    离线 launch 契约 fixture;真实训练属于 Plugin 验收通道。
     """
 
     def invoke(self, method: str, request: dict[str, Any]) -> dict[str, Any]:
         """Return deterministic contract payloads without implementing a trainer.
 
-        返回确定性的契约 payload，不实现 trainer。
+        返回确定性的契约 payload,不实现 trainer。
         """
 
         if method == "inspect":
