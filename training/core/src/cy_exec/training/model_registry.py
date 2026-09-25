@@ -1,4 +1,7 @@
-"""Typed adapter for the Plugins-owned ``model.registry.v1`` capability."""
+"""Typed adapter for the Plugins-owned ``model.registry.v1`` capability.
+
+针对 Plugins 所有的 model.registry.v1 能力的有类型适配器。
+"""
 
 from __future__ import annotations
 
@@ -16,7 +19,10 @@ _RESOURCE_URI = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$")
 
 @dataclass(frozen=True, slots=True)
 class ModelRegistration:
-    """Validated registry acknowledgement for one immutable ModelVersion."""
+    """Validated registry acknowledgement for one immutable ModelVersion.
+
+    针对一个不可变 ModelVersion 的已验证 registry 确认。
+    """
 
     model_version_id: str
     resource_uri: str
@@ -33,7 +39,10 @@ class ModelRegistration:
 
 
 class ModelRegistryPort(Protocol):
-    """Yield application port; registry implementations remain Plugins-owned."""
+    """Yield application port; registry implementations remain Plugins-owned.
+
+    Yield 应用端口；registry 实现仍由 Plugins 所有。
+    """
 
     def register(
         self,
@@ -41,11 +50,17 @@ class ModelRegistryPort(Protocol):
         *,
         source_ref: str,
     ) -> ModelRegistration:
-        """Register an immutable descriptor without transferring Artifact bytes."""
+        """Register an immutable descriptor without transferring Artifact bytes.
+
+        注册不可变描述符，不转移 Artifact 字节。
+        """
 
 
 class DirectPluginModelRegistry:
-    """Invoke ``model.registry.v1/register`` through one resolved endpoint."""
+    """Invoke ``model.registry.v1/register`` through one resolved endpoint.
+
+    通过一个已解析端点调用 model.registry.v1/register。
+    """
 
     def __init__(self, client: Any, *, deadline_seconds: float = 10.0) -> None:
         self._client = client
@@ -107,7 +122,10 @@ class DirectPluginModelRegistry:
 
 
 class ModelRegistryUnavailable(RuntimeError):
-    """The configured model registry could not produce a valid acknowledgement."""
+    """The configured model registry could not produce a valid acknowledgement.
+
+    已配置的 model registry 无法生成有效确认。
+    """
 
 
 def _registration(value: Any, *, expected_model_version_id: str) -> ModelRegistration:

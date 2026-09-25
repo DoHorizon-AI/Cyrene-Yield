@@ -1,8 +1,14 @@
-"""Shared helpers for Training Engine TCK tests."""
+"""Shared helpers for Training Engine TCK tests.
+
+Training Engine TCK 测试共用的 helper。
+"""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/tests/training_tck_helpers.py
+# │ 中文：文件：training/core/tests/training_tck_helpers.py
 # │ Module: training/core/tests/training_tck_helpers
+# │ 模块：training/core/tests/training_tck_helpers
 # │ Role: Yield core test module — verifies the unified training runtime and its contracts.
+# │ 职责：Yield 核心测试模块，验证统一训练 runtime 与契约。
 # │
 # │ 模块职责：Yield 核心测试模块——验证统一训练运行时及其契约。
 # └─────────────────────────────────────────────────────────────────────┘

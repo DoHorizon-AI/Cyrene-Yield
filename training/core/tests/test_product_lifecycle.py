@@ -26,7 +26,10 @@ from cyrene_preflight import AcceleratorFacts, HardwareFacts
 
 
 class AdapterFixtureExecutor:
-    """Unit fixture only: no training or GPU evidence is claimed by these bytes."""
+    """Unit fixture only: no training or GPU evidence is claimed by these bytes.
+
+    仅用于单元测试的 fixture；这些字节不代表训练或 GPU 验收证据。
+    """
 
     def __init__(self, *, broken=False):
         self.launches = []
@@ -268,7 +271,10 @@ def test_explicit_product_run_publishes_only_valid_results_and_survives_readback
 
 
 def _validate_public_run(run):
-    """Validate the actual HTTP response with only local canonical schema resources."""
+    """Validate the actual HTTP response with only local canonical schema resources.
+
+    仅使用本地规范 schema 资源验证实际 HTTP 响应。
+    """
     from jsonschema import Draft202012Validator, FormatChecker
     from referencing import Registry, Resource
 

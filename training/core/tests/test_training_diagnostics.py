@@ -4,6 +4,10 @@ Unit tests for Yield training diagnostics capture, paging and retention.
 Tests the raw-output path end to end at the seams that matter: the worker sink
 must never block the trainer, the host must only consume complete records, and
 the public page must stay bounded and redacted.
+
+Yield 训练诊断采集、分页与保留策略的单元测试。
+
+该测试端到端检查原始输出路径上的关键接缝：worker sink 绝不能阻塞 trainer，host 只能消费完整记录，公开分页必须保持有界并经过脱敏。
 """
 
 from __future__ import annotations
@@ -57,6 +61,7 @@ def test_sink_tags_both_streams_and_keeps_the_merged_log():
         assert records[1]["level"] == "warn"
         assert [record["sequence"] for record in records] == [0, 1]
         # Business events still come from the merged log, so it keeps both lines.
+        # 业务事件仍从合并日志中产生，因此两行都会保留。
         assert (root / "runtime.log").read_text(encoding="utf-8").splitlines() == [
             "step 1 loss=0.5",
             "CUDA out of memory",
@@ -80,6 +85,7 @@ def test_sink_over_budget_stops_writing_but_keeps_draining():
         ]
         assert any(record.get("code") == "YIELD.DIAGNOSTICS.BUDGET_EXCEEDED" for record in records)
         # The trainer never blocks: every line was consumed even while dropped.
+        # trainer 不会阻塞：即使记录被丢弃，每一行也都已被读取。
         assert len(records) < 200
 
 
@@ -88,6 +94,7 @@ def test_sink_degrades_without_blocking_when_the_file_cannot_be_written():
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         # A directory in place of the sink file makes every open fail.
+        # 如果 sink 文件路径被目录占用，每次打开都会失败。
         (root / "diagnostics.ndjson").mkdir()
         sink = worker.DiagnosticsSink(root)
         sink.start()
@@ -122,6 +129,7 @@ def test_executor_reads_only_complete_records():
         with sink_path.open("w", encoding="utf-8") as stream:
             stream.write('{"sequence":0,"stream":"stdout","message":"complete"}\n')
             # A half-written tail must stay buffered for the next poll.
+            # 未写完的尾部必须留在缓冲区，供下一次轮询读取。
             stream.write('{"sequence":1,"stream":"std')
             stream.flush()
 
@@ -168,6 +176,7 @@ def test_store_pages_diagnostics_and_reports_degradation():
         assert store.diagnostics_degraded("run-1") is True
 
         # Retention only touches terminal runs.
+        # 保留策略只处理终态 run。
         store.record_terminal_run("run-1", "FAILED", datetime.now(UTC) - timedelta(days=31))
         assert store.purge_expired_diagnostics() == 3
         assert store.list_diagnostics("run-1") == []

@@ -14,6 +14,7 @@ from typing import Any
 
 # ════════════════════════════════════════════════════════════════════════
 # Canonical Cyrene Yield Error Catalog & Mappings
+# 规范 Cyrene Yield 错误目录与映射。
 # ════════════════════════════════════════════════════════════════════════
 YIELD_ERROR_MAPPINGS: dict[str, dict[str, str]] = {
     "YIELD_RESOURCE_NOT_FOUND": {
@@ -65,7 +66,10 @@ YIELD_ERROR_MAPPINGS: dict[str, dict[str, str]] = {
 
 
 def map_yield_error(raw_code: str) -> dict[str, str]:
-    """Map a raw or legacy Yield error code to canonical PRODUCT.YIELD.<REASON>."""
+    """Map a raw or legacy Yield error code to canonical PRODUCT.YIELD.<REASON>.
+
+    将原始或旧版 Yield 错误码映射为规范 PRODUCT.YIELD.<REASON>。
+    """
     if raw_code in YIELD_ERROR_MAPPINGS:
         return YIELD_ERROR_MAPPINGS[raw_code]
     normalized = raw_code.upper().replace(" ", "_")

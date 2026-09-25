@@ -1,4 +1,7 @@
-"""Focused ProductRun resume invariants for checkpoint-backed retry actions."""
+"""Focused ProductRun resume invariants for checkpoint-backed retry actions.
+
+专门验证 checkpoint 支持的重试操作所需的 ProductRun 恢复不变量。
+"""
 
 from __future__ import annotations
 

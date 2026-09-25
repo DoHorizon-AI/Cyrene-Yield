@@ -65,7 +65,9 @@ from .product_store import ProductStore
 _RESUMABLE_STATES = frozenset({PlanStatus.FAILED, PlanStatus.CANCELLED, PlanStatus.AWAITING_RETRY})
 _TERMINAL_RUN_STATES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 # One diagnostics page is capped by both record count and serialized size, so a
+# 每个诊断分页同时受记录数和序列化字节数限制，因此
 # console poll can never pull an unbounded payload.
+# 控制台轮询不会获取无界 payload。
 DIAGNOSTICS_PAGE_LIMIT = 500
 DIAGNOSTICS_PAGE_MAX_BYTES = 1024 * 1024
 _REDACTED = "[redacted]"
@@ -93,7 +95,10 @@ def _json(resource: Any) -> dict[str, Any]:
 
 
 class YieldService:
-    """Yield owns drafts/results; TrainingControlPlane remains the run state store."""
+    """Yield owns drafts/results; TrainingControlPlane remains the run state store.
+
+    Yield 拥有 drafts 与 results；TrainingControlPlane 仍是 run 状态存储。
+    """
 
     def __init__(
         self,
@@ -125,7 +130,10 @@ class YieldService:
         self._lock = RLock()
 
     def create_draft(self, command: CreateTrainingDraft, key: str | None = None) -> TrainingDraft:
-        """Persist only references; importing never allocates compute or starts work."""
+        """Persist only references; importing never allocates compute or starts work.
+
+        只持久化引用；导入不会分配计算资源或启动工作。
+        """
         identifier = uuid4()
         draft = TrainingDraft(
             id=identifier,
@@ -156,7 +164,10 @@ class YieldService:
         offset: int = 0,
         workspace_id: str | None = None,
     ) -> TrainingRunPage:
-        """Return a deterministic offset page without exposing executor state."""
+        """Return a deterministic offset page without exposing executor state.
+
+        返回确定性的 offset 分页，不暴露 executor 状态。
+        """
 
         if not 0 <= offset:
             raise ValueError("YIELD_PAGINATION_INVALID: offset must be non-negative")
@@ -177,7 +188,10 @@ class YieldService:
         command: ImportLlamaFactoryYaml,
         key: str | None = None,
     ) -> TrainingDraft:
-        """Import only admitted LLaMA Factory fields into a DRAFT resource."""
+        """Import only admitted LLaMA Factory fields into a DRAFT resource.
+
+        只将获准的 LLaMA Factory 字段导入 DRAFT 资源。
+        """
 
         prefill = parse_llama_factory_yaml(command.yaml_text)
         draft_command = CreateTrainingDraft(
@@ -189,12 +203,18 @@ class YieldService:
         return self.create_draft(draft_command, key)
 
     def export_llama_factory_yaml(self, identifier: UUID) -> str:
-        """Export a draft's canonical parameters as LLaMA Factory YAML."""
+        """Export a draft's canonical parameters as LLaMA Factory YAML.
+
+        将 draft 的规范参数导出为 LLaMA Factory YAML。
+        """
 
         return render_llama_factory_yaml(**self._yaml_values(self.get_draft(identifier)))
 
     def export_result_llama_factory_yaml(self, identifier: UUID) -> str:
-        """Export the immutable result's source draft parameters as YAML."""
+        """Export the immutable result's source draft parameters as YAML.
+
+        将不可变结果的来源 draft 参数导出为 YAML。
+        """
 
         result = self.get_result(identifier)
         draft = self._draft_for_run(result.training_run.id)
@@ -230,7 +250,10 @@ class YieldService:
             return draft
 
     def start(self, identifier: UUID) -> TrainingRunResource:
-        """The explicit start is the only action that submits a TrainingRun."""
+        """The explicit start is the only action that submits a TrainingRun.
+
+        只有显式 start 操作会提交 TrainingRun。
+        """
         with self._lock:
             draft = self.get_draft(identifier)
             if draft.training_run is not None:
@@ -382,7 +405,10 @@ class YieldService:
         )
 
     def preflight(self, identifier: UUID) -> PreflightReport:
-        """Run the existing Product preflight and add local operational checks."""
+        """Run the existing Product preflight and add local operational checks.
+
+        运行现有 Product preflight 并增加本地运维检查。
+        """
 
         self._draft_for_run(identifier)
         run_id = "run-" + str(identifier)
@@ -446,7 +472,10 @@ class YieldService:
         return PreflightReport(status=report_status, items=items, checked_at=_now())
 
     def events(self, identifier: UUID, *, after_sequence: int = 0, limit: int = 5000) -> TrainingEventsPage:
-        """Harvest runtime events and return a durable ordered slice."""
+        """Harvest runtime events and return a durable ordered slice.
+
+        采集 runtime 事件，并返回持久化的有序切片。
+        """
 
         if after_sequence < 0:
             raise ValueError("YIELD_EVENT_SEQUENCE_INVALID: after_sequence must be non-negative")
@@ -467,7 +496,10 @@ class YieldService:
     def diagnostics(
         self, identifier: UUID, *, after_sequence: int = 0, limit: int = 200
     ) -> DiagnosticsPage:
-        """Harvest trainer output and return a durable, redacted page."""
+        """Harvest trainer output and return a durable, redacted page.
+
+        采集 trainer 输出，并返回持久化且已脱敏的分页。
+        """
 
         if after_sequence < 0:
             raise ValueError("YIELD_DIAGNOSTICS_SEQUENCE_INVALID: after_sequence must be non-negative")
@@ -489,7 +521,10 @@ class YieldService:
         )
 
     def _harvest_diagnostics(self, identifier: UUID) -> None:
-        """Persist only the new prefix of each attempt's raw output."""
+        """Persist only the new prefix of each attempt's raw output.
+
+        仅持久化每个 attempt 原始输出的新增前缀。
+        """
 
         run_id = "run-" + str(identifier)
         run = self.control.load(run_id)
@@ -510,7 +545,10 @@ class YieldService:
             self.store.append_diagnostics(str(identifier), str(attempt.attempt_id), documents)
 
     def _diagnostics_degraded(self, identifier: UUID, run: Any) -> bool:
-        """True when any attempt lost output or the budget was exhausted."""
+        """True when any attempt lost output or the budget was exhausted.
+
+        当任一 attempt 丢失输出或达到字节上限时返回 True。
+        """
 
         for attempt in run.attempts:
             if self.control.session_diagnostics_degraded(str(attempt.attempt_id)):
@@ -518,7 +556,10 @@ class YieldService:
         return self.store.diagnostics_degraded(str(identifier))
 
     def _harvest_events(self, identifier: UUID) -> None:
-        """Persist only the new prefix of each in-process attempt event stream."""
+        """Persist only the new prefix of each in-process attempt event stream.
+
+        仅持久化进程内 attempt 事件流的新增前缀。
+        """
 
         self._draft_for_run(identifier)
         run_id = "run-" + str(identifier)
@@ -551,7 +592,10 @@ class YieldService:
         command: ResumeTrainingRun,
         key: str | None = None,
     ) -> TrainingRunResource:
-        """Stage a verified checkpoint and append one explicit Attempt."""
+        """Stage a verified checkpoint and append one explicit Attempt.
+
+        暂存已验证的 checkpoint，并追加一个明确的 Attempt。
+        """
 
         with self._lock:
             draft = self._draft_for_run(identifier)
@@ -594,7 +638,10 @@ class YieldService:
         command: SendTrainingResultToExchange,
         key: str | None = None,
     ) -> GatewayRouteDraftReceipt:
-        """Create, but never confirm, an Exchange Route Draft for a result."""
+        """Create, but never confirm, an Exchange Route Draft for a result.
+
+        为一个结果创建 Exchange Route Draft，但绝不确认该 draft。
+        """
 
         result = self.get_result(identifier)
         if self.exchange_url is None:
@@ -649,7 +696,10 @@ class YieldService:
     def _inspect_reactor_endpoint(
         self, endpoint_url: str, result: TrainingResultResource
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Read the Reactor source before sending its versioned reference to Exchange."""
+        """Read the Reactor source before sending its versioned reference to Exchange.
+
+        将 Reactor 来源读取后，再向 Exchange 发送其版本化引用。
+        """
 
         if self.reactor_url is None:
             raise ValueError("YIELD_REACTOR_NOT_CONNECTED: configure the Reactor Product URL")
@@ -753,7 +803,10 @@ class YieldService:
         return created
 
     def _register_model_version(self, result: TrainingResultResource) -> None:
-        """Publish once when configured; Artifact bytes remain in the Artifact Plane."""
+        """Publish once when configured; Artifact bytes remain in the Artifact Plane.
+
+        配置后只发布一次；Artifact 字节仍留在 Artifact Plane。
+        """
         if self.model_registry is None:
             return
         model_version_id = result.model_version.get("id")
@@ -781,7 +834,10 @@ class YieldService:
         return result
 
     def list_attempts(self, identifier: UUID) -> list[TrainingAttemptResource]:
-        """Expose stable phase diagnostics without leaking host paths or raw logs."""
+        """Expose stable phase diagnostics without leaking host paths or raw logs.
+
+        暴露稳定的阶段诊断，不泄漏主机路径或原始日志。
+        """
         self._draft_for_run(identifier)
         run = self.control.load("run-" + str(identifier))
         return [
@@ -813,7 +869,10 @@ class YieldService:
         return self.get_run(identifier)
 
     def advance(self) -> None:
-        """Reconcile only runs explicitly started by a user, using the existing controller."""
+        """Reconcile only runs explicitly started by a user, using the existing controller.
+
+        只使用现有 controller 对用户明确启动的 run 执行 reconciliation。
+        """
         for draft in self.list_drafts():
             if draft.training_run is None:
                 continue
@@ -855,7 +914,10 @@ def _failure_code(detail: str | None) -> str:
 
 
 def json_bytes(value: Any) -> bytes:
-    """Encode an idempotency payload deterministically."""
+    """Encode an idempotency payload deterministically.
+
+    以确定性方式编码幂等 payload。
+    """
 
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
@@ -869,7 +931,10 @@ def _preflight_item_status(severity: PreflightSeverity) -> Literal["PASS", "WARN
 
 
 def _filesystem_preflight(output_dir: str) -> list[PreflightItem]:
-    """Check the output parent without returning its private path."""
+    """Check the output parent without returning its private path.
+
+    检查输出目录的父级，但不返回其私有路径。
+    """
 
     target = Path(output_dir)
     parent = target if target.exists() else target.parent
@@ -931,7 +996,10 @@ def _private_paths(spec: TrainingSpec | None, state_directory: Path) -> tuple[st
 
 
 def _bounded_diagnostics(items: list[DiagnosticRecord]) -> tuple[list[DiagnosticRecord], bool]:
-    """Trim a page to the serialized byte budget; report whether it was trimmed."""
+    """Trim a page to the serialized byte budget; report whether it was trimmed.
+
+    将分页裁剪到序列化字节上限，并报告是否发生裁剪。
+    """
 
     if not items:
         return items, False
@@ -947,7 +1015,10 @@ def _diagnostic_document(
     record: dict[str, Any],
     private_paths: tuple[str, ...],
 ) -> dict[str, Any]:
-    """Map one raw worker record onto the public DiagnosticRecord shape."""
+    """Map one raw worker record onto the public DiagnosticRecord shape.
+
+    将一条原始 worker 记录映射为公开 DiagnosticRecord 形状。
+    """
 
     message = _redact_text(str(record.get("message", ""))[:8192], private_paths)
     attempt_id = str(attempt.attempt_id)

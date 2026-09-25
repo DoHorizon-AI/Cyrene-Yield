@@ -23,7 +23,10 @@ from google.protobuf import json_format, message_factory
 
 
 class ContractKernel:
-    """Validate requests using the shipped Platform descriptor, then return fixture replies."""
+    """Validate requests using the shipped Platform descriptor, then return fixture replies.
+
+    使用随包提供的 Platform descriptor 验证请求，然后返回 fixture 回复。
+    """
 
     def __init__(self, path):
         self.encoder = KernelClient(path / "unused.sock")

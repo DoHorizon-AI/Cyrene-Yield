@@ -1,8 +1,14 @@
-"""Compose Yield admission invariants with the Plugins-owned dataset verdict."""
+"""Compose Yield admission invariants with the Plugins-owned dataset verdict.
+
+将 Yield 准入不变量与 Plugins 所有的数据集判定结果组合起来。
+"""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/validation/pipeline.py
+# │ 中文：文件：training/core/src/cy_exec/training/validation/pipeline.py
 # │ Module: training/core/src/cy_exec/training/validation/pipeline
+# │ 模块：training/core/src/cy_exec/training/validation/pipeline
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘

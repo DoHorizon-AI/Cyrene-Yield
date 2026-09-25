@@ -26,7 +26,10 @@ TRAINER_PROFILE = "CYRENE_YIELD_TRAINER_V1_CUDA128"
 
 
 def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
-    """Read one private READY manifest and enforce its profile boundary."""
+    """Read one private READY manifest and enforce its profile boundary.
+
+    读取一个私有 READY manifest，并强制执行其 profile 边界。
+    """
 
     if path.stat().st_mode & 0o077:
         raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected mode 0600")
@@ -44,7 +47,10 @@ def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
 def _runtime_from_manifests(
     *, state_directory: Path, runtime_config: Path, trainer_runtime_config: Path
 ) -> tuple[Path, KernelTrainingConfiguration]:
-    """Resolve all Kernel topology and trainer paths from canonical manifests."""
+    """Resolve all Kernel topology and trainer paths from canonical manifests.
+
+    从规范 manifest 中解析全部 Kernel 拓扑与 trainer 路径。
+    """
 
     runtime = _private_manifest(runtime_config, PLATFORM_RUNTIME_PROFILE)
     trainer = _private_manifest(trainer_runtime_config, TRAINER_PROFILE)
@@ -94,7 +100,10 @@ def _runtime_from_manifests(
 
 
 def _run_command(arguments: list[str]) -> int:
-    """Answer one read-only or cancellation question about a TrainingRun."""
+    """Answer one read-only or cancellation question about a TrainingRun.
+
+    针对 TrainingRun 回答一个只读或取消请求。
+    """
 
     parser = argparse.ArgumentParser(prog="cyrene-yield run", description="Inspect TrainingRuns")
     parser.add_argument("--url", default="http://127.0.0.1:8092")
@@ -128,7 +137,10 @@ def _run_command(arguments: list[str]) -> int:
 
 
 def main() -> None:
-    """Expose documented public APIs; operator paths never enter resource identities."""
+    """Expose documented public APIs; operator paths never enter resource identities.
+
+    暴露文档中列出的公开 API；运营路径不会进入资源身份。
+    """
     arguments = sys.argv[1:]
     if arguments and arguments[0] == "run":
         raise SystemExit(_run_command(arguments[1:]))

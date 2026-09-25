@@ -33,7 +33,10 @@ def _repository() -> Path:
 
 
 def run(args: argparse.Namespace) -> int:
-    """Sync the exact lock into runtime home, then execute the canonical probe."""
+    """Sync the exact lock into runtime home, then execute the canonical probe.
+
+    将精确锁定的依赖同步到 runtime home，然后执行规范探测。
+    """
 
     home = _runtime_home(args.runtime_home)
     project = Path(__file__).resolve().parent

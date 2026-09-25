@@ -21,13 +21,13 @@ TRAINING_RUN_SCHEMA = "contracts/product/v1/training-run.schema.json"
 
 
 def _git_show(repository: Path, revision: str, path: str) -> bytes:
-    """Read one immutable source object without modifying Platform. | 读取精确对象。"""
+    """Read one immutable source object without modifying Platform. | 读取一个不可变的源对象，不修改 Platform。"""
 
     return subprocess.check_output(["git", "-C", str(repository), "show", f"{revision}:{path}"])
 
 
 def main() -> None:
-    """Write or verify the generated schema and provenance. | 写入或校验投影。"""
+    """Write or verify the generated schema and provenance. | 写入或校验生成的 schema 及其来源信息。"""
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform-repository", type=Path, required=True)

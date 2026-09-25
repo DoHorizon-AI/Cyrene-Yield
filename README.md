@@ -162,3 +162,111 @@ llamafactory-cli export path/to/export.yaml
 - Plugin integration path: [`plugins/training/llama-factory/`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/tree/3afbac4d386eb7a27f6778149187884820c0b7f6/plugins/training/llama-factory)
 
 Model weights, checkpoints, generated configurations, logs, and other runtime artifacts remain in operator-managed storage and must not be committed to this repository.
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# Cyrene Yield
+
+Cyrene Yield 是 Cyrene 平台的企业级训练与微调 Product。本仓库包含 Product 状态、策略、编排、checkpoint 和交接逻辑；可复用的训练与数据集实现位于 Cyrene-Plugins-Official。
+
+本仓库是 Yield 公开发布所使用的 clean-root 源码内容。公开规范历史从基于此快照创建的无父 main 根提交开始。此前的完整仓库历史仅保留在私有的 Cyrene-Yield-history-archive 中；它不属于公开源码、依赖或发布输入。
+
+plugins/llama-factory-training/data 下历史遗留的 LLaMA Factory 演示数据集已从 clean root 中排除，且未获准公开再分发。已提交的 Product 目录只包含源码和契约；运行时数据集、模型权重和 checkpoint 仍由运营方管理。
+
+GitHub 仓库和锁定的 Plugins 修订版均可公开访问，因此匿名 clone 可以解析锁定的 Product 安装。公开源码可见性、二进制分发、托管 CI 和真实 CUDA 验收仍是相互独立的门禁。
+
+## 权威文档与契约
+
+- **Product API 与训练契约规范**：见 docs/API.md。
+- **架构蓝图**：见 ARCHITECTURE.md。
+- **仓库生命周期与边界**：见 docs/REPOSITORY-LIFECYCLE.md。
+- **插件依赖**：见 PLUGIN_DEPENDENCIES.md。
+- **依赖与 SBOM 记录**：见 docs/DEPENDENCIES.md。
+- **许可证**：见 LICENSE。
+- **安全政策**：见 SECURITY.md。
+- **贡献指南**：见 CONTRIBUTING.md。
+- **LLaMA Factory 插件改进**：见 Cyrene-Plugins-Official 中的 CYRENE_IMPROVEMENTS.md。
+- **Service manifest**：见 service.json。
+
+## 仓库布局
+
+- training/core/ 包含 TrainingSpec、TrainingRuntime/TrainingAttempt（唯一的 Product 作业状态权威来源）、Product 执行器、准入不变量、checkpoint/Artifact 发布以及直连 Plugin 适配器。
+- Cyrene-Plugins-Official 拥有 LLaMA Factory 后端和通用数据集验证器。Yield 通过 training.llama-factory.v1 与 tool.dataset.validator.v1 调用它们；仓库内没有 trainer 或数据集解析器回退实现。
+
+## Plugins 所有的 LLaMA Factory 说明
+
+下表说明由 Cyrene Plugins 拥有的可选 LLaMA Factory 能力，供 Product 集成参考。它不是 Yield 自有实现，也不表示已完成对整个上游代码树的迁移。提取出的源码与上游声明保留在 Plugin 仓库；重新分发前请审阅 UPSTREAM_PROVENANCE.md。
+
+Cyrene Plugins 中的 LLaMA Factory 能力基于 hiyouga/LLaMA-Factory 定制，目标是降低企业用户的训练配置门槛，并将可复用引擎能力与 Yield 的产品生命周期分离。
+
+| 改动 | Plugins 提取版本 | 原版 LLaMA Factory |
+| --- | --- | --- |
+| WebUI 流程 | 类似 Windows OOBE 的四步引导：模型与环境、数据、训练参数、确认并启动 | 单页展示大量参数和功能标签 |
+| 参数复杂度 | 根据训练目标、显存、模型规模和优先级生成推荐配置，并按用户选择显示不同参数分支 | 用户需要自行理解并填写大部分超参数 |
+| 自动配置 | 推荐配置生成后仍允许用户修改，最终以用户确认值为准 | 以手动配置为主 |
+| 显存安全 | 启动前读取模型配置和训练配置，估算单设备峰值显存，并额外增加 10% 安全余量 | WebUI 不提供同等的训练前显存建议和强制启动告警流程 |
+| 风险确认 | 显存不足、低于建议值或无法确认时不建议训练；强制启动必须经过二次警告确认 | 无对应的引导式确认窗口 |
+| 加速默认值 | 默认使用 liger_kernel，依赖固定为 liger-kernel>=0.8.0 | 可使用 auto 或由用户自行选择加速方式 |
+| 产品能力 | WebUI 和 CLI 仅保留训练、配置预览/保存、进度监控及适配器合并导出 | 同时提供评估、预测、聊天、WebChat 和 API 等入口 |
+| 适配器交付 | 保留并重新设计适配器合并页面，按来源、输出格式和保存位置分步配置 | 通用导出页面 |
+| 多语言 | 支持英语、简体中文、俄语、韩语和日语；业务代码不直接写入中文，显示文本统一来自本地化资源 | 支持多语言，但不是针对新增引导流程设计 |
+| CLI | 默认路由仅保留 train、export、webui、env、version；V1 保留训练类型和 merge | 还包含 api、chat、eval、webchat 等非训练命令 |
+
+### 引导式训练流程
+
+此流程作为 Plugin 行为记录，供集成参考。Yield 拥有外围 Product 意图和尝试状态，不随包交付或拥有此 WebUI 实现。
+
+1. 回答四个面向业务的问题，生成安全的起始配置。
+2. 选择模型、适配器、下载来源、输出目录和计算环境。
+3. 选择数据集，并仅展示与所选目标相关的参数分支。
+4. 检查可编辑的生成配置并运行 VRAM 预检。
+5. 推荐配置通过后启动训练；若强制运行，必须明确确认警告。
+
+### 适配器合并流程
+
+适配器合并页面会复用引导流程中选定的基础模型和适配器。随后由运营人员选择输出格式和目标位置，生成可独立部署的制品。量化为可选项。
+
+## 快速开始
+
+```bash
+git clone https://github.com/DoHorizon-AI/Cyrene-Yield.git
+cd Cyrene-Yield
+uv sync --locked --extra dev
+uv run pytest training/core/tests/
+```
+
+上述命令用于验证 Product core 及其本地测试契约；它们不代表托管 CI、真实 CUDA 设备、模型下载或上游 LLaMA Factory 完整迁移已通过。
+
+完成的 ModelVersion 可选用 Platform 解析的 model.registry.v1 直连端点发布。Yield 只发送不可变描述符和来源引用，模型字节仍由 Artifact Plane 管理。使用 --model-registry-connection-ref 配置端点。有效回执会被持久化，因此 reconciliation 不会重复发布同一版本。
+
+Plugins 仓库公开可访问时，可单独检查其不可变修订版：
+
+```bash
+git clone https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git
+cd Cyrene-Plugins-Official
+git checkout 3afbac4d386eb7a27f6778149187884820c0b7f6
+cd plugins/training/llama-factory
+pip install -e .
+llamafactory-cli webui
+```
+
+可选 Plugin WebUI 只包含两个 Product 级入口：
+
+- **引导式训练**
+- **适配器合并**
+
+直接使用 CLI：
+
+```bash
+llamafactory-cli train path/to/train.yaml
+llamafactory-cli export path/to/export.yaml
+```
+
+## 上游与集成参考
+
+- 上游基线：hiyouga/LLaMA-Factory。
+- 面向训练的定制：Icy-Lunar/LlamaFactory@f5a4a8f8。
+- Plugin 集成路径：Cyrene-Plugins-Official 中的 plugins/training/llama-factory/。
+
+模型权重、checkpoint、生成的配置、日志和其他运行时制品仍保存在运营方管理的存储中，不得提交到本仓库。

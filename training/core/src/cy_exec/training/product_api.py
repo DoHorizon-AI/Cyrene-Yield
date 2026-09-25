@@ -79,11 +79,15 @@ def create_app(
     control: TrainingControlPlane | None = None,
     http_client: httpx.Client | None = None,
 ) -> FastAPI:
-    """Build the Product independently; live training requires an explicit Kernel binding."""
+    """Build the Product independently; live training requires an explicit Kernel binding.
+
+    独立构建 Product；实时训练需要显式配置 Kernel 绑定。
+    """
     state_directory.mkdir(parents=True, exist_ok=True)
     owner = (state_directory / "product.lock").open("a")
     if kernel is not None:
         # Acquire ownership before constructing the lease renewal adapter.
+        # 在构建租约续期适配器前先取得所有权。
         fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
     artifacts = LocalArtifactProvider(artifact_root)
     executor = KernelTrainingExecutor(kernel) if kernel is not None else None
@@ -153,7 +157,9 @@ def create_app(
             purge_task.cancel()
             stopped.set()
             # Finish the current bounded RPC or Artifact publication before
+            # 在关闭其 store 并允许另一个 Product writer 进入前，
             # closing its store and allowing another Product writer.
+            # 先完成当前有界 RPC 或 Artifact 发布。
             worker.join()
             if executor is not None:
                 executor.close()

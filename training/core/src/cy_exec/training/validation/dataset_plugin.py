@@ -22,7 +22,10 @@ DATASET_VALIDATOR_CONNECTION_ENV = "CYRENE_DATASET_VALIDATOR_CONNECTION_REF"
 
 @dataclass(frozen=True, slots=True)
 class ValidationError:
-    """One owner-reported dataset validation error."""
+    """One owner-reported dataset validation error.
+
+    由数据集所有方报告的一项校验错误。
+    """
 
     row_index: int | None
     field: str | None
@@ -32,7 +35,10 @@ class ValidationError:
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Validated Product projection of the capability response."""
+    """Validated Product projection of the capability response.
+
+    对 capability 响应进行验证后的 Product 映射。
+    """
 
     is_valid: bool
     row_count: int
@@ -45,7 +51,10 @@ class ValidationResult:
 
 
 class DatasetValidationPort(Protocol):
-    """Yield application port for reusable dataset validation."""
+    """Yield application port for reusable dataset validation.
+
+    用于可复用数据集校验的 Yield 应用端口。
+    """
 
     def validate(
         self,
@@ -54,11 +63,17 @@ class DatasetValidationPort(Protocol):
         sample_size: int = 5,
         schema: str | None = None,
     ) -> ValidationResult:
-        """Validate one staged training input through the canonical owner."""
+        """Validate one staged training input through the canonical owner.
+
+        通过规范所有者校验一个暂存后的训练输入。
+        """
 
 
 class DirectPluginDatasetValidator:
-    """Invoke ``tool.dataset.validator.v1`` through one resolved endpoint."""
+    """Invoke ``tool.dataset.validator.v1`` through one resolved endpoint.
+
+    通过一个已解析端点调用 tool.dataset.validator.v1。
+    """
 
     def __init__(self, client: Any, *, deadline_seconds: float = 30.0) -> None:
         self._client = client
@@ -66,7 +81,10 @@ class DirectPluginDatasetValidator:
 
     @classmethod
     def from_environment(cls) -> DirectPluginDatasetValidator:
-        """Create a validator from Platform-resolved connection configuration."""
+        """Create a validator from Platform-resolved connection configuration.
+
+        根据 Platform 解析的连接配置创建 validator。
+        """
 
         connection_ref = os.environ.get(DATASET_VALIDATOR_CONNECTION_ENV, "").strip()
         if not connection_ref:
@@ -92,7 +110,10 @@ class DirectPluginDatasetValidator:
         sample_size: int = 5,
         schema: str | None = None,
     ) -> ValidationResult:
-        """Invoke and validate the typed owner response."""
+        """Invoke and validate the typed owner response.
+
+        调用并校验有类型的所有者响应。
+        """
 
         request = {
             "file_path": path,
@@ -135,11 +156,17 @@ class DirectPluginDatasetValidator:
 
 
 class DatasetValidationUnavailable(RuntimeError):
-    """The required reusable dataset validation capability is unavailable."""
+    """The required reusable dataset validation capability is unavailable.
+
+    所需的可复用数据集校验能力不可用。
+    """
 
 
 class UnavailableDatasetValidator:
-    """Fail-closed adapter used when no resolved endpoint is configured."""
+    """Fail-closed adapter used when no resolved endpoint is configured.
+
+    未配置已解析端点时使用的 fail-closed 适配器。
+    """
 
     def __init__(self, reason: str) -> None:
         self._reason = reason
@@ -168,7 +195,10 @@ class UnavailableDatasetValidator:
 
 
 def dataset_validator_from_environment() -> DatasetValidationPort:
-    """Resolve the direct adapter or a stable fail-closed projection."""
+    """Resolve the direct adapter or a stable fail-closed projection.
+
+    解析直连适配器，或返回稳定的 fail-closed 映射。
+    """
 
     try:
         return DirectPluginDatasetValidator.from_environment()

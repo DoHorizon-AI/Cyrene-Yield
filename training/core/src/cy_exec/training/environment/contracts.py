@@ -34,7 +34,10 @@ def _mapping(value: Mapping[str, str]) -> Dict[str, str]:
 
 @dataclass(frozen=True)
 class EnvironmentSpec:
-    """Requirements for an environment, not observations of a host."""
+    """Requirements for an environment, not observations of a host.
+
+    描述环境需求，而不是主机观测结果。
+    """
 
     runtime_profile: Optional[str] = None
     python_version_constraint: Optional[str] = None
@@ -96,7 +99,10 @@ class EnvironmentSpec:
 
 @dataclass(frozen=True)
 class EnvironmentLock:
-    """Resolved, immutable environment identity."""
+    """Resolved, immutable environment identity.
+
+    已解析且不可变的环境身份。
+    """
 
     schema_version: str
     runtime_profile: str

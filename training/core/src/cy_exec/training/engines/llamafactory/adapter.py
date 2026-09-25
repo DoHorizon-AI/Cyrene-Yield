@@ -1,4 +1,7 @@
-"""Yield adapter for the Plugins-owned LLaMA Factory capability."""
+"""Yield adapter for the Plugins-owned LLaMA Factory capability.
+
+Yield 针对 Plugins 所有的 LLaMA Factory 能力的适配器。
+"""
 
 from __future__ import annotations
 
@@ -28,7 +31,10 @@ INTERFACE_VERSION = "1"
 
 
 class LlamaFactoryPluginConnection:
-    """Small Product-side connector for one resolved DirectPlugin endpoint."""
+    """Small Product-side connector for one resolved DirectPlugin endpoint.
+
+    面向一个已解析 DirectPlugin 端点的小型 Product 连接器。
+    """
 
     def __init__(self, client: Any) -> None:
         self._client = client
@@ -50,7 +56,10 @@ class LlamaFactoryPluginConnection:
         return cls(DirectPluginClient.for_local_connection_ref(connection_ref))
 
     def invoke(self, method: str, request: dict[str, Any]) -> dict[str, Any]:
-        """Invoke one typed JSON method and decode only capability-owned bytes."""
+        """Invoke one typed JSON method and decode only capability-owned bytes.
+
+        调用一个有类型的 JSON 方法，只解码该能力所有的字节。
+        """
         request_type_url = f"type.cyrene.io/{CAPABILITY_ID}.{method}.request"
         response = self._client.invoke(
             capability=CAPABILITY_ID,
@@ -68,7 +77,10 @@ class LlamaFactoryPluginConnection:
 
 
 class LlamaFactoryEngineAdapter:
-    """Adapt Yield contracts to the Plugins-owned LLaMA Factory endpoint."""
+    """Adapt Yield contracts to the Plugins-owned LLaMA Factory endpoint.
+
+    将 Yield 契约适配到 Plugins 所有的 LLaMA Factory 端点。
+    """
 
     kind = EngineKind.LLAMA_FACTORY
 

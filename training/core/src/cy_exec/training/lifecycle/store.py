@@ -1,12 +1,18 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/lifecycle/store.py
+# ║ 文件：training/core/src/cy_exec/training/lifecycle/store.py
 # ║ Module: Cyrene Yield
+# ║ 模块：Cyrene Yield
 # ║ Role: Product-owned training lifecycle persistence.
+# ║ 职责：Product 所有的训练生命周期持久化。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：训练产品拥有的生命周期持久化。
 # ╚══════════════════════════════════════════════════════════════════════╝
-"""Persistence ports and a small crash-safe local reference store."""
+"""Persistence ports and a small crash-safe local reference store.
+
+持久化端口与轻量、崩溃安全的本地参考存储。
+"""
 
 from __future__ import annotations
 
@@ -21,11 +27,17 @@ from .contracts import ExecutionPlan, Generation, IdempotencyKey, ProductRun, _t
 
 
 class StaleGenerationError(RuntimeError):
-    """A stale observer attempted to overwrite newer Product state."""
+    """A stale observer attempted to overwrite newer Product state.
+
+    过期观测者试图覆盖较新的 Product 状态。
+    """
 
 
 class IdempotencyConflictError(RuntimeError):
-    """An idempotency key was reused for a different Product intent."""
+    """An idempotency key was reused for a different Product intent.
+
+    幂等键被用于不同的 Product 意图。
+    """
 
 
 class ControlPlaneStore(Protocol):
@@ -44,7 +56,10 @@ class ControlPlaneStore(Protocol):
 
 
 class JsonFileControlPlaneStore:
-    """Reference durable store with atomic replacement and no database coupling."""
+    """Reference durable store with atomic replacement and no database coupling.
+
+    通过原子替换实现且不依赖数据库的参考持久化存储。
+    """
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)

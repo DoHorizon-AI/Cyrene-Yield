@@ -39,3 +39,33 @@ Product 适配器与投影，不 vendoring 引擎，也不宣称已完整迁移�
 - [Cyrene System Map](https://github.com/DoHorizon-AI/Cyrene-Platform/blob/main/docs/start-here/01-system-map.md) / Cyrene 系统地图
 - [Training Flow](https://github.com/DoHorizon-AI/Cyrene-Platform/blob/main/docs/flows/training-end-to-end.md) / 训练端到端流程
 - [Where Does My Code Go?](https://github.com/DoHorizon-AI/Cyrene-Platform/blob/main/docs/start-here/03-where-does-my-code-go.md) / 代码归属指南
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# Cyrene-Yield 架构
+
+Cyrene-Yield 拥有**模型训练与微调 Product 领域**：训练意图、run/attempt 状态、策略、reconciliation、checkpoint 发布和 Product 交接。它使用与提供方无关的 ArtifactRef，并将通用执行委托给 Platform，将具体引擎委托给 Plugins。
+
+## Runtime 边界
+
+```text
+TrainingSpec -> preflight -> tiny dry run -> TrainingRuntime
+    -> Product/Platform executor -> Plugins capability
+    -> checkpoint verification -> ArtifactRef / TrainingResult
+```
+
+TrainingRuntime 是 Product 的 attempt 协调器。Platform 负责进程监管、租约和硬件事实。Plugins 通过版本化能力提供具体的 LLaMA Factory 和数据集校验实现。Yield 只保留 Product 适配器和映射层；它不 vendoring 引擎，也不宣称已完整迁移上游 LLaMA-Factory 代码树。
+
+## 仓库地图
+
+- training/core/：Product runtime、契约、执行器、preflight 和 checkpoint 发布。
+- sdk/python/cyrene_yield_contracts/：公开模型组合与 lineage 契约。
+- trainer-runtime/：独立锁定的 CUDA 环境引导与探测。
+- docs/：双语 API、架构、生命周期和依赖记录。
+
+## 规范参考
+
+- Cyrene System Map：Cyrene 系统地图。
+- Training Flow：训练端到端流程。
+- Where Does My Code Go?：代码归属指南。

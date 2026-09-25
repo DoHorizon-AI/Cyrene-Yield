@@ -34,7 +34,7 @@ def publish_adapter(
     The trainer resolved the immutable base into a private directory. Replace
     that transport location with its selected immutable upstream identity in
     the exported PEFT configuration; all PEFT tuning facts remain untouched.
-    将暂存基座路径转回已选择的不可变来源；不复制 rank/alpha 等 PEFT 事实。
+    中文：只发布 PEFT 配置和权重，不发布 trainer workspace。trainer 将不可变基座解析到私有目录后，在导出的 PEFT 配置中用所选的不可变上游身份替换该传输路径；所有 PEFT 调参事实保持不变。
     """
     for name in ADAPTER_MEMBERS:
         path = output / name
@@ -74,7 +74,10 @@ def compose_result(
     tokenizer: Mapping[str, Any],
     chat_template: Mapping[str, Any],
 ) -> ModelVersion:
-    """Create the Yield-owned model descriptor using opaque Product lineage refs."""
+    """Create the Yield-owned model descriptor using opaque Product lineage refs.
+
+    使用不透明 Product lineage 引用创建 Yield 所有的模型描述符。
+    """
     return ModelVersion.create(
         {
             "schemaVersion": MODEL_VERSION_SCHEMA_VERSION,
@@ -93,7 +96,10 @@ def compose_result(
 
 
 def _verify_weights(path: Path) -> None:
-    """Reject truncated or empty safetensors before publishing a successful result."""
+    """Reject truncated or empty safetensors before publishing a successful result.
+
+    在发布成功结果前拒绝截断或为空的 safetensors。
+    """
     with path.open("rb") as stream:
         prefix = stream.read(8)
         if len(prefix) != 8:

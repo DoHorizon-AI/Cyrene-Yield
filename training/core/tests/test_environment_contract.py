@@ -1,4 +1,7 @@
-"""Contract tests for Yield-owned environment selection and locking."""
+"""Contract tests for Yield-owned environment selection and locking.
+
+验证 Yield 所有环境选择与锁定契约的测试。
+"""
 
 from __future__ import annotations
 

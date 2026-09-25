@@ -1,8 +1,14 @@
-"""Typed training errors and validation issues."""
+"""Typed training errors and validation issues.
+
+有类型的训练错误与校验问题。
+"""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/errors.py
+# │ 中文：文件：training/core/src/cy_exec/training/contracts/errors.py
 # │ Module: training/core/src/cy_exec/training/contracts/errors
+# │ 模块：training/core/src/cy_exec/training/contracts/errors
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ 职责：规范 Yield 训练 runtime，拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -28,7 +34,10 @@ class TrainingErrorCode(str, Enum):
 
 @dataclass
 class TrainingIssue:
-    """One validation or runtime issue."""
+    """One validation or runtime issue.
+
+    一项校验或 runtime 问题。
+    """
 
     code: str
     message: str
@@ -46,7 +55,10 @@ class TrainingIssue:
 
 @dataclass
 class TrainingError(Exception):
-    """Structured failure used by adapters and the runtime."""
+    """Structured failure used by adapters and the runtime.
+
+    供适配器与 runtime 使用的结构化失败信息。
+    """
 
     code: TrainingErrorCode
     message: str

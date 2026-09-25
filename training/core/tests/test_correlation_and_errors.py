@@ -1,5 +1,7 @@
 """
 Unit tests for Cyrene Yield correlation propagation, error mapping, and logging.
+
+Cyrene Yield 关联信息传播、错误映射与日志的单元测试。
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ def test_w3c_traceparent_parsing():
     assert span_id == "00f067aa0ba902b7"
 
     # All zeros rejection
+    # 拒绝全零值。
     assert parse_w3c_traceparent("00-00000000000000000000000000000000-00f067aa0ba902b7-01") is None
     assert parse_w3c_traceparent("00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01") is None
     assert parse_w3c_traceparent("invalid-traceparent") is None
@@ -114,6 +117,7 @@ def test_api_traceparent_and_error_handling():
             req_id = "req-yield-test-999"
 
             # Request non-existent draft to trigger 404 failure ProblemDetails
+            # 请求不存在的 draft，以触发 404 失败 ProblemDetails。
             res = client.get(
                 "/api/v1/training-drafts/00000000-0000-0000-0000-000000000001",
                 headers={"traceparent": traceparent, "x-request-id": req_id},

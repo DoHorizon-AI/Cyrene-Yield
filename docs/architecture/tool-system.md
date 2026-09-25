@@ -51,3 +51,52 @@ sequenceDiagram
 - 训练适配器不能静默摄取或清洗属于 Catalyst 的原始数据集。
 - 检查点发布必须保留摘要与血缘信息。
 - LLaMA Factory 与数据集解析实现必须保留在 Plugins；Yield 只保留 Product 端口与映射。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# 工具与能力系统
+
+## 训练能力接缝
+
+Yield 将 Product 层训练意图与执行训练所需的引擎和进程机制分开。runtime 编译经过验证的规格、选择适配器、暂存工作负载并收集已验证制品。
+
+| 接口 | 职责 | 源码区域 |
+|---|---|---|
+| TrainingSpec 与 contracts | 稳定的意图、状态、attempt、工作负载和事件类型 | training/core/src/cy_exec/training/contracts/ |
+| TrainingRuntime | Product attempt 协调与事件处理 | training/core/src/cy_exec/training/runtime.py |
+| 引擎适配器 | 将 Product 意图映射到 Plugins 所有的训练能力 | training/core/src/cy_exec/training/engines/ |
+| Platform execution adapter | 通过固定的 Kernel 权威提交、观察和取消 | training/core/src/cy_exec/training/executors/kernel_training.py |
+| Preflight 与 dry run | 拦截不兼容或不安全的工作负载 | training/core/src/cy_exec/training/preflight.py |
+| Checkpoint manager | 校验、计算摘要并发布 checkpoint 制品 | training/core/src/cy_exec/training/checkpoint/ |
+| LLaMA Factory 后端 | 提供可选的可复用引擎能力和引导式 WebUI | 通过 training.llama-factory.v1 接入 Cyrene-Plugins-Official/plugins/training/llama-factory/ |
+| Dataset validator | 解析暂存文件并报告 schema/质量事实 | 通过 tool.dataset.validator.v1 接入 Cyrene-Plugins-Official/plugins/tools/dataset-validator/ |
+
+## 执行顺序
+
+```mermaid
+sequenceDiagram
+    participant C as Caller 调用方
+    participant R as TrainingRuntime
+    participant F as Preflight/DryRun
+    participant A as Training Plugin
+    participant X as Platform execution adapter
+    participant K as CheckpointManager
+
+    C->>R: 提交 TrainingSpec
+    R->>F: 校验环境并执行门禁
+    F-->>R: 返回通过或阻止
+    R->>A: 通过直连能力编译
+    R->>X: 暂存并执行工作负载
+    X-->>R: 发出 attempt 事件
+    R->>K: 验证 checkpoint
+    K-->>R: 返回带摘要的制品
+```
+
+## 非归属规则
+
+- TrainingRuntime 是 Product attempt 协调器；引擎适配器不得成为持久状态权威。
+- 生产执行必须显式绑定规范 Platform。Yield 没有本地或进程内回退。
+- 训练适配器不得静默接入或清洗 Catalyst 所有的原始数据集。
+- checkpoint 发布必须保留摘要与 lineage 信息。
+- LLaMA Factory 和数据集解析实现必须留在 Plugins；Yield 只保留 Product 端口和映射层。

@@ -17,7 +17,9 @@ from pydantic import ValidationError
 from .product_models import LlamaFactoryPrefill, TrainingParameters
 
 # Only these LLaMA Factory fields are mapped to the canonical TrainingSpec.
+# 只有这些 LLaMA Factory 字段会映射到规范 TrainingSpec。
 # Anything else fails closed; silent ignoring would change training intent.
+# 其余字段一律 fail closed；静默忽略会改变训练意图。
 ALLOWED_FIELDS = frozenset(
     {
         "model_name_or_path",
@@ -37,7 +39,10 @@ ALLOWED_FIELDS = frozenset(
 
 
 class LlamaFactoryYamlError(ValueError):
-    """Typed YAML mapping failure carrying a stable Product code."""
+    """Typed YAML mapping failure carrying a stable Product code.
+
+    携带稳定 Product 错误码的有类型 YAML 映射错误。
+    """
 
     def __init__(self, code: str, detail: str) -> None:
         super().__init__(f"{code}: {detail}")
@@ -99,7 +104,10 @@ def render_llama_factory_yaml(
     dataset: str | None,
     parameters: TrainingParameters,
 ) -> str:
-    """Render canonical parameters as a standard LLaMA Factory YAML document."""
+    """Render canonical parameters as a standard LLaMA Factory YAML document.
+
+    将规范参数渲染为标准 LLaMA Factory YAML 文档。
+    """
 
     document: dict[str, Any] = {
         "num_train_epochs": parameters.epochs,
