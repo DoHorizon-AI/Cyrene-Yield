@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   build-and-deploy:
@@ -23,13 +24,19 @@ jobs:
     env:
       AZURE_RESOURCE_GROUP: Container-APP
       AZURE_APP_NAME: cyrene-yield
-      AZURE_LOCATION: eastasia
-      AZURE_CONTAINERAPP_ENV: cae-dh-eastasia
-      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
     steps:
-      - name: Require Azure deployment credentials
-        run: test -n "$AZURE_CREDENTIALS"
+      - name: Require Azure OIDC configuration
+        run: |
+          for variable in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!variable}" ]; then
+              echo "$variable is required for ACA deployment" >&2
+              exit 1
+            fi
+          done
 
       - name: Checkout Cyrene-Yield
         uses: actions/checkout@v5
@@ -45,6 +52,13 @@ jobs:
             git clone --quiet --depth 1 --branch develop "https://github.com/DoHorizon-AI/$name.git" "$name" 2>/dev/null || \
             git clone --quiet --depth 1 "https://github.com/DoHorizon-AI/$name.git" "$name"
           done
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -79,44 +93,16 @@ jobs:
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:latest
 
-      - name: Log in to Azure
-        if: env.AZURE_CREDENTIALS != ''
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Deploy or update Azure Container App
-        if: env.AZURE_CREDENTIALS != ''
+      - name: Update Azure Container App
         run: |
-          if az containerapp show --name "$AZURE_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-            echo "Updating existing container app $AZURE_APP_NAME in $AZURE_RESOURCE_GROUP..."
-            az containerapp update \
-              --name "$AZURE_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --image "${{ steps.meta.outputs.full_image }}"
-          else
-            echo "Creating container app $AZURE_APP_NAME in $AZURE_CONTAINERAPP_ENV ($AZURE_LOCATION)..."
-            az containerapp create \
-              --name "$AZURE_APP_NAME" \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --environment "$AZURE_CONTAINERAPP_ENV" \
-              --image "${{ steps.meta.outputs.full_image }}" \
-              --target-port 8092 \
-              --ingress internal \
-              --registry-server ghcr.io \
-              --registry-username "${{ github.actor }}" \
-              --registry-password "${{ secrets.GITHUB_TOKEN }}" \
-              --cpu 0.25 \
-              --memory 0.5Gi \
-              --min-replicas 1 \
-              --max-replicas 2 \
-              --env-vars YIELD_HOST="0.0.0.0" YIELD_PORT="8092"
-          fi
+          az containerapp update \
+            --name "$AZURE_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "${{ steps.meta.outputs.full_image }}"
 
       - name: Verify healthy internal revision
-        if: env.AZURE_CREDENTIALS != ''
         run: |
-          for i in {1..30}; do
+          for i in {1..60}; do
             INGRESS_EXTERNAL=$(az containerapp show --name "$AZURE_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "properties.configuration.ingress.external" -o tsv)
             if [ "$INGRESS_EXTERNAL" != "false" ]; then
               echo "Yield ingress is not internal" >&2
@@ -132,7 +118,7 @@ jobs:
                 exit 0
               fi
             fi
-            echo "Waiting for healthy revision with image ${{ steps.meta.outputs.full_image }} ($i/30)"
+            echo "Waiting for healthy revision with image ${{ steps.meta.outputs.full_image }} ($i/60)"
             sleep 3
           done
           echo "Yield revision did not become healthy with the expected image" >&2
