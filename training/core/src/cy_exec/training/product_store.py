@@ -11,11 +11,14 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import RLock
 from typing import Any, List
 from uuid import UUID
+
+from .logging import format_cyrene_log
 
 
 class ProductStore:
@@ -361,8 +364,16 @@ class ProductStore:
                                 run_id = str(run_ref).split("/")[-1]
                             if run_id:
                                 terminal_ids.add(str(run_id))
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as exc:
+                        sys.stderr.write(
+                            format_cyrene_log(
+                                level="WARN",
+                                event_name="yield.training.terminal_run_parse_failed",
+                                message="Failed to parse document timestamp or run reference",
+                                attributes={"cause": str(exc)},
+                            )
+                            + "\n"
+                        )
         return sorted(terminal_ids)
 
     def close(self) -> None:

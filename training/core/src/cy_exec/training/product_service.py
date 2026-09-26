@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
@@ -23,6 +24,8 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 import httpx
 from cy_artifacts import LocalArtifactProvider
 from cyrene_preflight import HardwareFacts, PreflightSeverity, PreflightStatus
+
+from .logging import format_cyrene_log
 
 from .contracts import DatasetRef, EngineKind, HyperparamSpec, LoRASpec, ModelRef, QuantizationSpec, TrainingSpec
 from .contracts.events import TrainingEvent, TrainingEventKind
@@ -771,7 +774,15 @@ class YieldService:
         try:
             result = TrainingResultResource.model_validate(self.store.get("result", str(identifier)))
         except KeyError:
-            pass
+            sys.stderr.write(
+                format_cyrene_log(
+                    level="INFO",
+                    event_name="yield.training.result_cache_miss",
+                    message="No cached training result found in store; proceeding with generation",
+                    attributes={"result_id": str(identifier)},
+                )
+                + "\n"
+            )
         else:
             self._register_model_version(result)
             return result
