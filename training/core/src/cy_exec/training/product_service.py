@@ -1121,7 +1121,7 @@ def _number(value: Any) -> float | None:
     try:
         return float(value) if value is not None else None
     except (TypeError, ValueError):
-        return None
+        return None  # diagnostic-allow: Invalid optional numeric input is handled as absent.
 
 
 def _select_checkpoint(

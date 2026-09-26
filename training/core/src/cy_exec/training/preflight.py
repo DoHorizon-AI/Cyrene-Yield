@@ -138,7 +138,7 @@ def _parameter_count(spec: TrainingSpec) -> Optional[int]:
     try:
         parsed = int(value) if value is not None else None
     except (TypeError, ValueError):
-        return None
+        return None  # diagnostic-allow: Invalid optional model metadata has no reliable count.
     return parsed if parsed and parsed > 0 else None
 
 

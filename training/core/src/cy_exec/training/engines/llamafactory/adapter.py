@@ -194,11 +194,11 @@ def _as_int(value: Any) -> int | None:
     try:
         return None if value is None else int(value)
     except (TypeError, ValueError):
-        return None
+        return None  # diagnostic-allow: Invalid optional integer is represented as absent.
 
 
 def _as_float(value: Any) -> float | None:
     try:
         return None if value is None else float(value)
     except (TypeError, ValueError):
-        return None
+        return None  # diagnostic-allow: Invalid optional float is represented as absent.
