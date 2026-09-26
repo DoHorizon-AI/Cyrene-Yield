@@ -370,7 +370,7 @@ class ProductStore:
                                 level="WARN",
                                 event_name="yield.training.terminal_run_parse_failed",
                                 message="Failed to parse document timestamp or run reference",
-                                attributes={"cause": str(exc)},
+                                attributes={"cause_type": type(exc).__name__},
                             )
                             + "\n"
                         )

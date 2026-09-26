@@ -332,8 +332,12 @@ def create_app(
         return service.start(draft_id)
 
     @app.get("/api/v1/training-runs/{run_id}", response_model=TrainingRunResource, response_model_exclude_none=True)
-    def get_run(run_id: UUID) -> TrainingRunResource:
-        return service.get_run(run_id)
+    def get_run(run_id: UUID, request: Request) -> TrainingRunResource:
+        return service.get_run(
+            run_id,
+            trace_id=request.state.trace_id,
+            span_id=request.state.span_id,
+        )
 
     @app.get("/api/v1/training-runs", response_model=TrainingRunPage, response_model_exclude_none=True)
     def list_runs(
