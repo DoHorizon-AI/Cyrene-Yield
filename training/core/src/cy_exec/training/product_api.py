@@ -11,6 +11,7 @@ from __future__ import annotations
 import fcntl
 import asyncio
 import json
+import sqlite3
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -59,7 +60,6 @@ from .model_registry import (
 from .product_service import YieldService
 from .product_store import ProductStore
 from .runtime import TrainingRuntime
-
 
 
 def create_app(
@@ -135,8 +135,14 @@ def create_app(
         fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
             service.store.purge_expired_diagnostics()
-        except Exception:
-            pass
+        except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
+            emit_diagnostic_error(
+                "product.yield.diagnostics_purge_failed",
+                "YIELD_DIAGNOSTICS_PURGE_FAILED",
+                "Failed to purge expired diagnostics during startup",
+                trace_id=uuid4().hex,
+                attributes={"cause_kind": type(exc).__name__, "phase": "startup"},
+            )
 
         async def _periodic_purge() -> None:
             while True:
@@ -145,8 +151,14 @@ def create_app(
                     service.store.purge_expired_diagnostics()
                 except asyncio.CancelledError:
                     break
-                except Exception:
-                    pass
+                except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
+                    emit_diagnostic_error(
+                        "product.yield.diagnostics_purge_failed",
+                        "YIELD_DIAGNOSTICS_PURGE_FAILED",
+                        "Failed to purge expired diagnostics in background maintenance",
+                        trace_id=uuid4().hex,
+                        attributes={"cause_kind": type(exc).__name__, "phase": "periodic"},
+                    )
 
         purge_task = asyncio.create_task(_periodic_purge())
         worker = threading.Thread(target=reconcile, daemon=True)
@@ -170,9 +182,7 @@ def create_app(
     app.state.yield_service = service
 
     @app.middleware("http")
-    async def propagate_trace(
-        request: Request, call_next: Any
-    ) -> Response:
+    async def propagate_trace(request: Request, call_next: Any) -> Response:
         parsed_trace = parse_w3c_traceparent(request.headers.get("traceparent"))
         trace_id = parsed_trace[0] if parsed_trace else uuid4().hex
         parent_span_id = parsed_trace[1] if parsed_trace else "0000000000000001"

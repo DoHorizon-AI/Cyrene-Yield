@@ -7,6 +7,7 @@ Cyrene Yield 关联信息传播、错误映射与日志的单元测试。
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -23,6 +24,7 @@ from cy_exec.training.logging import (
     sanitize_request_id,
 )
 from cy_exec.training.product_api import create_app
+from cy_exec.training.product_store import ProductStore
 
 
 def test_w3c_traceparent_parsing():
@@ -133,3 +135,27 @@ def test_api_traceparent_and_error_handling():
             assert problem.get("requestId") == req_id or problem.get("request_id") == req_id
             assert problem.get("traceId") == "4bf92f3577b34da6a3ce929d0e0e4736"
             assert problem.get("recoveryAction") == "user_action_required"
+
+
+def test_startup_purge_failure_emits_structured_diagnostic(monkeypatch, capsys, tmp_path: Path) -> None:
+    """A failed background retention cleanup has its own traceable boundary log."""
+
+    def fail_purge(_store: ProductStore) -> int:
+        raise sqlite3.OperationalError("private database path")
+
+    monkeypatch.setattr(ProductStore, "purge_expired_diagnostics", fail_purge)
+    app = create_app(state_directory=tmp_path / "state", artifact_root=tmp_path / "artifacts")
+    with TestClient(app):
+        pass
+
+    records = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+    purge_errors = [
+        record for record in records if record.get("event.name") == "product.yield.diagnostics_purge_failed"
+    ]
+    assert len(purge_errors) == 1
+    error = purge_errors[0]
+    assert error["attributes"]["error.code"] == "YIELD_DIAGNOSTICS_PURGE_FAILED"
+    assert error["attributes"]["phase"] == "startup"
+    assert error["attributes"]["cause_kind"] == "OperationalError"
+    assert len(error["trace_id"]) == 32
+    assert "private database path" not in error["message"]

@@ -333,7 +333,7 @@ def _peak_memory(events: Sequence) -> Optional[int]:
         try:
             parsed.append(int(value))
         except (TypeError, ValueError):
-            pass
+            pass  # diagnostic-allow: Ignore malformed optional peak memory samples.
     return max(parsed) if parsed else None
 
 

@@ -85,7 +85,7 @@ class DiagnosticsSink:
         try:
             self._degraded_path.write_text("", encoding="utf-8")
         except OSError:
-            pass
+            pass  # diagnostic-allow: In-memory degraded state remains observable if marker write fails.
 
     def _record(self, stream: str, text: str) -> str:
         trimmed = text[:MAX_LINE_CHARS]
@@ -142,7 +142,7 @@ class DiagnosticsSink:
                             )
                             handle.flush()
                         except OSError:
-                            pass
+                            pass  # diagnostic-allow: Diagnostics budget is already recorded in memory.
                     continue
                 line = self._record(stream, text)
                 try:
@@ -172,12 +172,12 @@ def _pump(pipe: Any, stream: str, sink: DiagnosticsSink) -> None:
         for line in pipe:
             sink.put(stream, line.rstrip("\n"))
     except (OSError, ValueError):
-        pass
+        pass  # diagnostic-allow: Closed output pipe is expected during worker shutdown.
     finally:
         try:
             pipe.close()
         except (OSError, ValueError):
-            pass
+            pass  # diagnostic-allow: Pipe close failure cannot change worker completion.
 
 
 def main() -> None:

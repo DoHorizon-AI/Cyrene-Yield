@@ -228,7 +228,7 @@ class KernelTrainingExecutor:
                         self._release(receipt)
                         released = True
                     except (grpc.RpcError, OSError, ValueError):
-                        pass  # Propagated as LOST, never a successful cleanup receipt.
+                        pass  # diagnostic-allow: Release failure is propagated as LOST.
                 raise ExecutionControlError(
                     "YIELD_KERNEL_START_FAILED: inspect the execution host diagnostics",
                     cleanup_attempted=receipt["lease"] is not None,
