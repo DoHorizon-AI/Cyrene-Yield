@@ -1,4 +1,7 @@
-"""Verify Yield exposes only the Plugins-owned training engine seam."""
+"""Verify Yield exposes only the Plugins-owned training engine seam.
+
+验证 Yield 只暴露 Plugins 所有的训练引擎接缝。
+"""
 
 from __future__ import annotations
 

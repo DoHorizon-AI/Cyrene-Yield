@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import httpx
 import uvicorn
 
 from .executors.kernel_training import KernelTrainingConfiguration
@@ -25,7 +26,10 @@ TRAINER_PROFILE = "CYRENE_YIELD_TRAINER_V1_CUDA128"
 
 
 def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
-    """Read one private READY manifest and enforce its profile boundary."""
+    """Read one private READY manifest and enforce its profile boundary.
+
+    读取一个私有 READY manifest,并强制执行其 profile 边界。
+    """
 
     if path.stat().st_mode & 0o077:
         raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected mode 0600")
@@ -43,7 +47,10 @@ def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
 def _runtime_from_manifests(
     *, state_directory: Path, runtime_config: Path, trainer_runtime_config: Path
 ) -> tuple[Path, KernelTrainingConfiguration]:
-    """Resolve all Kernel topology and trainer paths from canonical manifests."""
+    """Resolve all Kernel topology and trainer paths from canonical manifests.
+
+    从规范 manifest 中解析全部 Kernel 拓扑与 trainer 路径。
+    """
 
     runtime = _private_manifest(runtime_config, PLATFORM_RUNTIME_PROFILE)
     trainer = _private_manifest(trainer_runtime_config, TRAINER_PROFILE)
@@ -92,8 +99,51 @@ def _runtime_from_manifests(
     )
 
 
+def _run_command(arguments: list[str]) -> int:
+    """Answer one read-only or cancellation question about a TrainingRun.
+
+    针对 TrainingRun 回答一个只读或取消请求。
+    """
+
+    parser = argparse.ArgumentParser(prog="cyrene-yield run", description="Inspect TrainingRuns")
+    parser.add_argument("--url", default="http://127.0.0.1:8092")
+    parser.add_argument("--token-env", help="Name of the Product credential variable")
+    commands = parser.add_subparsers(dest="run_command", required=True)
+    for name in ("status", "logs", "cancel"):
+        command = commands.add_parser(name)
+        command.add_argument("run_id")
+    args = parser.parse_args(arguments)
+    headers = {"Accept": "application/json"}
+    token = os.environ.get(args.token_env) if args.token_env else None
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    base = args.url.rstrip("/")
+    try:
+        with httpx.Client(base_url=base, headers=headers, timeout=60.0) as client:
+            if args.run_command == "cancel":
+                response = client.post(f"/api/v1/training-runs/{args.run_id}/actions/cancel")
+            elif args.run_command == "logs":
+                response = client.get(f"/api/v1/training-runs/{args.run_id}/attempts")
+            else:
+                response = client.get(f"/api/v1/training-runs/{args.run_id}")
+            if response.status_code >= 300:
+                print(f"Yield: HTTP {response.status_code}", file=sys.stderr)
+                return 1
+            print(json.dumps(response.json(), indent=2))
+    except httpx.HTTPError as exc:
+        print(f"Yield: connection failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> None:
-    """Expose documented public APIs; operator paths never enter resource identities."""
+    """Expose documented public APIs; operator paths never enter resource identities.
+
+    暴露文档中列出的公开 API;运营路径不会进入资源身份。
+    """
+    arguments = sys.argv[1:]
+    if arguments and arguments[0] == "run":
+        raise SystemExit(_run_command(arguments[1:]))
     parser = argparse.ArgumentParser(description="Cyrene Yield Text Model Lifecycle V1")
     parser.add_argument("--state-directory", required=True, type=Path)
     parser.add_argument("--runtime-config", type=Path)
@@ -106,12 +156,23 @@ def main() -> None:
     parser.add_argument("--allow-wsl-shared-device", action="store_true")
     parser.add_argument("--reactor-url")
     parser.add_argument("--reactor-token-env", help="Name of the Reactor Product credential variable")
+    parser.add_argument("--exchange-url")
+    parser.add_argument("--exchange-token-env", help="Name of the Exchange Product credential variable")
+    parser.add_argument("--exchange-endpoint-id")
+    parser.add_argument("--exchange-target-binding-id")
+    parser.add_argument(
+        "--model-registry-connection-ref",
+        help="Platform-resolved connection_ref for model.registry.v1",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8092)
     args = parser.parse_args()
     token = os.environ.get(args.reactor_token_env) if args.reactor_token_env else None
     if args.reactor_token_env and not token:
         parser.error("The configured Reactor credential variable is empty")
+    exchange_token = os.environ.get(args.exchange_token_env) if args.exchange_token_env else None
+    if args.exchange_token_env and not exchange_token:
+        parser.error("The configured Exchange credential variable is empty")
     kernel: KernelTrainingConfiguration | None = None
     if args.runtime_config or args.trainer_runtime_config:
         if not args.runtime_config or not args.trainer_runtime_config:
@@ -159,6 +220,11 @@ def main() -> None:
         kernel=kernel,
         reactor_url=args.reactor_url,
         reactor_bearer_token=token,
+        exchange_url=args.exchange_url,
+        exchange_bearer_token=exchange_token,
+        exchange_endpoint_id=args.exchange_endpoint_id,
+        exchange_target_binding_id=args.exchange_target_binding_id,
+        model_registry_connection_ref=args.model_registry_connection_ref,
     )
     uvicorn.run(app, host=args.host, port=args.port)
 

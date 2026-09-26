@@ -21,3 +21,26 @@ Start with `training/core/src/cy_exec/training/validation/__init__.py` and then 
 Read sibling modules in runtime order; use the parent README for ownership boundaries.
 从 `training/core/src/cy_exec/training/validation/__init__.py` 开始，再按包入口或导入关系继续阅读。
 按运行时顺序阅读同级模块；职责边界请查阅父目录 README。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# training/core/src/cy_exec/training/validation
+
+Yield 训练准入不变量与数据集校验 Plugin 的直连适配器。
+
+## 文件
+
+| 条目 | 职责 |
+|---|---|
+| training/core/src/cy_exec/training/validation/__init__.py | 包初始化与公开导入边界。 |
+| training/core/src/cy_exec/training/validation/dataset_plugin.py | Product 端口及 fail-closed 的 tool.dataset.validator.v1 适配器。 |
+| training/core/src/cy_exec/training/validation/files.py | Python 实现或测试模块：files.py。 |
+| training/core/src/cy_exec/training/validation/model.py | Python 实现或测试模块：model.py。 |
+| training/core/src/cy_exec/training/validation/params.py | Python 实现或测试模块：params.py。 |
+| training/core/src/cy_exec/training/validation/pipeline.py | 将 Product 准入不变量与 Plugin 结果组合起来。 |
+
+## 推荐阅读顺序
+
+先从 training/core/src/cy_exec/training/validation/__init__.py 开始，再沿包入口或导入关系继续阅读。
+按 runtime 顺序阅读同级模块；职责边界请参见父目录 README。

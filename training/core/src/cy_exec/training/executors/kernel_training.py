@@ -32,7 +32,10 @@ from .kernel_rpc import KernelClient, context
 
 
 class KernelTrainingConfiguration(BaseModel):
-    """Operator configuration, never accepted as a Product handoff payload."""
+    """Operator configuration, never accepted as a Product handoff payload.
+
+    运营方配置,不接受为 Product 交接 payload。
+    """
 
     model_config = ConfigDict(extra="forbid")
     socket: Path
@@ -53,7 +56,10 @@ def _digest(value: bytes) -> str:
 
 
 class KernelTrainingExecutor:
-    """Kernel owns process trees and leases; files are private execution receipts."""
+    """Kernel owns process trees and leases; files are private execution receipts.
+
+    Kernel 拥有进程树与租约;文件是私有执行回执。
+    """
 
     def __init__(self, configuration: KernelTrainingConfiguration, *, client: Any = None) -> None:
         self.configuration = configuration
@@ -76,7 +82,10 @@ class KernelTrainingExecutor:
         os.replace(pending, path)
 
     def hardware_facts(self) -> HardwareFacts:
-        """Project the Kernel's NVIDIA CUDA inventory into the existing preflight contract."""
+        """Project the Kernel's NVIDIA CUDA inventory into the existing preflight contract.
+
+        将 Kernel 的 NVIDIA CUDA 清单映射到现有 preflight 契约。
+        """
         facts = self.kernel.capabilities()
         accelerators = []
         for resource in facts.get("resources", []):
@@ -97,7 +106,9 @@ class KernelTrainingExecutor:
                     allocatable_memory_bytes=int(available["value"]),
                     device_family=resource.get("attributes", {}).get("family"),
                     # FP32 is a baseline of the provider's CUDA capability. No claim
+                    # FP32 是提供方 CUDA 能力的基线。此处不声称支持
                     # is made about optional BF16/FP16/quantized execution support.
+                    # 可选的 BF16/FP16/量化执行。
                     features=("fp32",),
                 )
             )
@@ -110,7 +121,10 @@ class KernelTrainingExecutor:
         )
 
     def recover(self) -> list[tuple[TrainingLaunchSpec, ProcessHandle]]:
-        """Restore existing receipt handles without acquiring another lease."""
+        """Restore existing receipt handles without acquiring another lease.
+
+        恢复现有回执句柄,不再获取新的租约。
+        """
         recovered = []
         with self._lock:
             for path in self._receipts.glob("*.json"):
@@ -124,7 +138,10 @@ class KernelTrainingExecutor:
         return json.loads(path.read_bytes())
 
     def start(self, launch: TrainingLaunchSpec) -> ProcessHandle:
-        """Acquire and start through Kernel; never spawn a training subprocess here."""
+        """Acquire and start through Kernel; never spawn a training subprocess here.
+
+        通过 Kernel 获取租约并启动;不得在此启动训练子进程。
+        """
         try:
             facts = self._admit(launch)
         except (grpc.RpcError, OSError, ValueError) as exc:
@@ -211,7 +228,7 @@ class KernelTrainingExecutor:
                         self._release(receipt)
                         released = True
                     except (grpc.RpcError, OSError, ValueError):
-                        pass  # Propagated as LOST, never a successful cleanup receipt.
+                        pass  # diagnostic-allow: Release failure is propagated as LOST.
                 raise ExecutionControlError(
                     "YIELD_KERNEL_START_FAILED: inspect the execution host diagnostics",
                     cleanup_attempted=receipt["lease"] is not None,
@@ -316,7 +333,10 @@ class KernelTrainingExecutor:
         self._save(receipt)
 
     def poll(self, handle: ProcessHandle) -> int | None:
-        """A trainer exit plus confirmed Kernel cleanup precedes terminal success."""
+        """A trainer exit plus confirmed Kernel cleanup precedes terminal success.
+
+        只有 trainer 退出且 Kernel 确认清理后,状态才能进入终态成功。
+        """
         with self._lock:
             receipt = self._receipt(handle)
             root = self.configuration.installations / receipt["worker"]["id"]
@@ -352,6 +372,53 @@ class KernelTrainingExecutor:
             handle.extra["logOffset"] = stream.tell()
             return [line.rstrip("\n") for line in lines]
 
+    def read_new_diagnostics(self, handle: ProcessHandle) -> list[dict[str, Any]]:
+        """Return the new NDJSON diagnostic records the worker wrote.
+
+        Only complete lines are consumed: a half-written tail stays buffered so
+        the next poll picks it up instead of dropping the record.
+
+        只消费完整行，半行留在下次采集，避免截断记录。
+        """
+
+        path = (
+            self.configuration.installations
+            / str(handle.extra.get("worker_id", ""))
+            / "diagnostics.ndjson"
+        )
+        if not path.exists():
+            return []
+        offset = int(handle.extra.get("diagnosticsOffset", 0))
+        with path.open("r", encoding="utf-8", errors="replace") as stream:
+            stream.seek(offset)
+            chunk = stream.read(1024 * 1024)
+        boundary = chunk.rfind("\n")
+        if boundary == -1:
+            return []
+        handle.extra["diagnosticsOffset"] = offset + boundary + 1
+        records: list[dict[str, Any]] = []
+        for line in chunk[: boundary + 1].splitlines():
+            try:
+                document = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(document, dict):
+                records.append(document)
+        return records
+
+    def diagnostics_degraded(self, handle: ProcessHandle) -> bool:
+        """True when the worker could not keep every diagnostic line.
+
+        当 worker 未能保留每一条诊断行时返回 True。
+        """
+
+        marker = (
+            self.configuration.installations
+            / str(handle.extra.get("worker_id", ""))
+            / "diagnostics.degraded"
+        )
+        return marker.exists()
+
     def wait(self, handle: ProcessHandle, timeout: float | None = None) -> int | None:
         deadline = None if timeout is None else time.monotonic() + timeout
         while deadline is None or time.monotonic() < deadline:
@@ -368,7 +435,9 @@ class KernelTrainingExecutor:
                     receipt = json.loads(path.read_bytes())
                     if receipt["released"] or receipt["lease"] is None or not receipt.get("operation"):
                         # An uncertain start without an operation receipt must expire
+                        # 对于没有 operation 回执的不确定启动,必须在 Kernel TTL 到期后
                         # under Kernel TTL rather than retaining an orphan indefinitely.
+                        # 失效,不得无限期保留孤儿执行。
                         continue
                     lease = receipt["lease"]
                     try:
@@ -386,7 +455,10 @@ class KernelTrainingExecutor:
                     self._save(receipt)
 
     def close(self) -> None:
-        """Stop renewing; Kernel TTL remains the execution authority."""
+        """Stop renewing; Kernel TTL remains the execution authority.
+
+        停止续租;Kernel TTL 仍是执行权威。
+        """
         self._stopping.set()
         self._renewal.join(timeout=20)
         self.kernel.close()

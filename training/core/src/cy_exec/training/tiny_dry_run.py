@@ -1,8 +1,14 @@
-"""Product-level bounded execution gate using the normal training runtime path."""
+"""Product-level bounded execution gate using the normal training runtime path.
+
+使用正常训练 runtime 路径执行 Product 级有界执行门禁。
+"""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/tiny_dry_run.py
+# │ 中文:文件:training/core/src/cy_exec/training/tiny_dry_run.py
 # │ Module: training/core/src/cy_exec/training/tiny_dry_run
+# │ 模块:training/core/src/cy_exec/training/tiny_dry_run
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -37,7 +43,10 @@ class TinyDryRunStatus(str, Enum):
 
 
 class TinyDryRunGateError(RuntimeError):
-    """Raised when a full product training run has not passed the dry-run gate."""
+    """Raised when a full product training run has not passed the dry-run gate.
+
+    当完整 Product 训练 run 尚未通过 dry-run 门禁时抛出。
+    """
 
 
 @dataclass
@@ -78,15 +87,21 @@ class TinyDryRunResult:
 
 # ════════════════════════════════════════════════════════════════════════
 # 🔧 CLASS: TinyDryRun
+# 🔧 类:TinyDryRun
 #
 #   Executes the minimal training gate that validates the selected engine and
+#   执行最小训练门禁,验证所选引擎和
 #   workload path before full training is admitted.
+#   工作负载路径,然后才允许完整训练。
 #
 #   执行最小训练门禁，在准入完整训练前验证选定引擎与工作负载路径。
 #
 # ════════════════════════════════════════════════════════════════════════
 class TinyDryRun:
-    """Runs a bounded product attempt through the same adapter and executor as a full run."""
+    """Runs a bounded product attempt through the same adapter and executor as a full run.
+
+    通过与完整 run 相同的适配器和 executor 执行有界 attempt。
+    """
 
     def __init__(self, runtime: TrainingRuntime, preflight: Optional[TrainingPreflight] = None) -> None:
         self._runtime = runtime
@@ -94,7 +109,10 @@ class TinyDryRun:
 
     @staticmethod
     def bounded_spec(spec: TrainingSpec) -> TrainingSpec:
-        """Use the same bounded trainer settings in a durable Product attempt."""
+        """Use the same bounded trainer settings in a durable Product attempt.
+
+        在持久化 Product attempt 中使用相同的有界 trainer 配置。
+        """
         return _bounded_spec(spec, samples=128, steps=1)
 
     def run(
@@ -141,7 +159,10 @@ class TinyDryRun:
         return self._result_from_session(session, preflight, started, samples, steps)
 
     def cancel(self, session_id: str, timeout: float = 15.0) -> TrainingSession:
-        """Reuse runtime cancellation; terminal cancellation still needs tree cleanup."""
+        """Reuse runtime cancellation; terminal cancellation still needs tree cleanup.
+
+        复用 runtime 取消流程;进入终态前仍需清理进程树。
+        """
 
         return self._runtime.cancel(session_id, timeout=timeout)
 
@@ -312,7 +333,7 @@ def _peak_memory(events: Sequence) -> Optional[int]:
         try:
             parsed.append(int(value))
         except (TypeError, ValueError):
-            pass
+            pass  # diagnostic-allow: Ignore malformed optional peak memory samples.
     return max(parsed) if parsed else None
 
 

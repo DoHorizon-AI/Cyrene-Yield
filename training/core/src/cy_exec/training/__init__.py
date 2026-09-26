@@ -6,6 +6,15 @@ Single product call chain:
       -> TrainingRuntime / TrainingAttempt
         -> TrainingEngineAdapter (Plugins-owned LLaMA Factory)
           -> explicit Platform-backed execution adapter
+
+统一训练架构。
+
+单一 Product 调用链:
+
+    TrainingSpec
+      -> TrainingRuntime / TrainingAttempt
+        -> TrainingEngineAdapter(Plugins 所有的 LLaMA Factory)
+          -> 显式的 Platform 执行适配器
 """
 
 from .capability_seam import (

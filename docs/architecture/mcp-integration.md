@@ -32,3 +32,32 @@ flowchart LR
 - 复用正常训练生命周期与取消路径。
 - 将协议错误与前置校验、引擎、执行器、检查点错误分开。
 - 不返回凭证、原始本地路径或不受管理的进程句柄。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# MCP 集成
+
+## 当前状态
+
+Yield 的主要训练接口是 Python API、CLI、WebUI 和 Platform 执行契约。当前活跃 Product 接口中没有单独的 MCP 训练 runtime 边界说明。
+
+## 预期适配边界
+
+如果以后增加 MCP 适配器，它应将经过验证的工具请求转换为 TrainingSpec 操作，并返回稳定的状态/制品视图。它不得启动不受管理的进程树，也不得绕过 preflight、dry-run、审批或取消策略。
+
+```mermaid
+flowchart LR
+    Client["MCP client MCP 客户端"] --> Adapter["Thin Yield adapter Yield 薄适配器"]
+    Adapter --> Spec["TrainingSpec 训练规格"]
+    Spec --> Runtime["TrainingRuntime 训练运行时"]
+    Runtime --> Executor["Platform-aware executor 平台感知执行器"]
+    Runtime --> Artifact["Checkpoint artifact 检查点制品"]
+```
+
+## 评审清单
+
+- 分发前验证模型、数据集引用、输出策略、资源意图和超时。
+- 复用正常训练生命周期与取消路径。
+- 将协议错误与 preflight、引擎、执行器及 checkpoint 错误区分开。
+- 不返回凭证、原始本地路径或不受管理的进程句柄。

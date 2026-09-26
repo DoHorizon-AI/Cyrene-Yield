@@ -20,3 +20,26 @@ Product 到 Platform 所有 Kernel 执行权威的唯一适配器。
 
 Read `base.py`, then `kernel_training.py`, and finally the signed worker payload.
 先阅读 `base.py`，再阅读 `kernel_training.py`，最后查看签名 Worker 载荷。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# training/core/src/cy_exec/training/executors
+
+这是 Product 到 Platform 所有 Kernel 执行权威的唯一适配器。
+
+## 文件
+
+| 条目 | 职责 |
+|---|---|
+| training/core/src/cy_exec/training/executors/__init__.py | 包初始化与公开导入边界。 |
+| training/core/src/cy_exec/training/executors/base.py | Product 执行端口、回执映射与稳定的控制失败。 |
+| training/core/src/cy_exec/training/executors/kernel_training.py | 固定 Platform Kernel 契约的适配器。 |
+| training/core/src/cy_exec/training/executors/kernel_rpc.py | 对固定 Platform descriptor 的动态客户端投影。 |
+| training/core/src/cy_exec/training/executors/training_worker.py | 仅由 Platform 监管启动的已签名 worker payload。 |
+| training/core/src/cy_exec/training/executors/kernel.desc | 生成的 Platform 协议 descriptor。 |
+| training/core/src/cy_exec/training/executors/kernel-descriptor.json | descriptor 来源与摘要。 |
+
+## 推荐阅读顺序
+
+先阅读 base.py，然后阅读 kernel_training.py，最后查看已签名的 worker payload。

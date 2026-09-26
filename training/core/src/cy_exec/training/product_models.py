@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from cy_artifacts import ArtifactRef as PlatformArtifactRef
-from pydantic import BaseModel as PydanticModel
+from pydantic import AliasChoices, BaseModel as PydanticModel
 from pydantic import ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
@@ -23,7 +23,10 @@ class ContractModel(PydanticModel):
 
 
 class ArtifactRef(ContractModel):
-    """Projection of Platform ArtifactRef; identity is validated by its SDK."""
+    """Projection of Platform ArtifactRef; identity is validated by its SDK.
+
+    Platform ArtifactRef 的映射;身份由其 SDK 验证。
+    """
 
     model_config = ConfigDict(alias_generator=None, populate_by_name=True, extra="forbid")
     uri: str = Field(pattern=r"^artifact://sha256/[0-9a-f]{64}$")
@@ -44,7 +47,10 @@ class ArtifactRef(ContractModel):
 
 
 class ResourceRef(ContractModel):
-    """Opaque, versioned identity owned by the source Product."""
+    """Opaque, versioned identity owned by the source Product.
+
+    由来源 Product 拥有的不透明版本化身份。
+    """
 
     uri: str = Field(pattern=r"^(https?://|cyrene://)[^\s]+$")
     id: UUID
@@ -85,12 +91,49 @@ class TrainingParameters(ContractModel):
     max_steps: int | None = Field(default=None, ge=1)
     lora_rank: int = Field(default=8, ge=1, le=512)
     lora_alpha: int = Field(default=16, ge=1)
+    lora_dropout: float = Field(default=0.05, ge=0, le=1)
     template: str = Field(default="default", pattern=r"^[A-Za-z0-9_-]{1,100}$")
+
+
+class LlamaFactoryPrefill(ContractModel):
+    """Mapped LLaMA Factory fields kept on a draft before preparation.
+
+    准备之前保留在 draft 上的 LLaMA Factory 字段映射。
+    """
+
+    model_name_or_path: str | None = Field(
+        default=None, min_length=1, max_length=4096, exclude_if=lambda value: value is None
+    )
+    dataset: str | None = Field(
+        default=None, min_length=1, max_length=4096, exclude_if=lambda value: value is None
+    )
+    parameters: TrainingParameters = Field(default_factory=TrainingParameters)
 
 
 class CreateTrainingDraft(ContractModel):
     name: str = Field(min_length=1, max_length=200)
     dataset_version: DatasetVersionRef
+    workspace_id: str = Field(default="default", min_length=1, max_length=200)
+    imported_parameters: LlamaFactoryPrefill | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
+class ImportLlamaFactoryYaml(ContractModel):
+    """Create a draft while importing a strict LLaMA Factory YAML document.
+
+    导入严格的 LLaMA Factory YAML 文档并创建 draft。
+    """
+
+    name: str = Field(min_length=1, max_length=200)
+    dataset_version: DatasetVersionRef
+    workspace_id: str = Field(default="default", min_length=1, max_length=200)
+    yaml_text: str = Field(
+        min_length=1,
+        max_length=1_000_000,
+        validation_alias=AliasChoices("yaml", "yamlText", "content"),
+        serialization_alias="yaml",
+    )
 
 
 class PrepareTrainingDraft(ContractModel):
@@ -105,6 +148,10 @@ class TrainingDraft(ContractModel):
     name: str
     dataset_version: DatasetVersionRef
     configuration: PrepareTrainingDraft | None = None
+    imported_parameters: LlamaFactoryPrefill | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    workspace_id: str = "default"
     training_run: ResourceRef | None = None
     cancellation_requested_at: datetime | None = None
     created_at: datetime
@@ -164,6 +211,19 @@ class TrainingRunResource(ContractModel):
     failure: ProductFailure | None = None
 
 
+class TrainingRunPage(ContractModel):
+    """Stable offset page for the training-run collection.
+
+    训练运行集合的稳定 offset 分页。
+    """
+
+    items: list[TrainingRunResource]
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+    next_offset: int | None = Field(default=None, ge=0)
+
+
 class HandoffReceipt(ContractModel):
     target_resource: ResourceRef
     status: Literal["DRAFT", "PREPARED", "STARTED"]
@@ -171,10 +231,141 @@ class HandoffReceipt(ContractModel):
 
 
 class TrainingAttemptResource(ContractModel):
-    """Public diagnostic projection; executor paths stay private."""
+    """Public diagnostic projection; executor paths stay private.
+
+    公开诊断映射;executor 路径保持私有。
+    """
 
     id: UUID
     training_run_id: UUID
     phase: str
     state: str
     failure: ProductFailure | None = None
+
+
+class TrainingEventResource(ContractModel):
+    """Durable, ordered, redacted training event. | 持久化有序脱敏训练事件。"""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+    sequence: int = Field(ge=1)
+    training_run_id: UUID
+    attempt_id: str
+    phase: str
+    kind: str
+    message: str = ""
+    step: int | None = Field(default=None, ge=0)
+    total_steps: int | None = Field(default=None, ge=0)
+    epoch: float | None = None
+    loss: float | None = None
+    learning_rate: float | None = None
+    throughput: float | None = None
+    eta_seconds: float | None = None
+    checkpoint: dict[str, Any] | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    timestamp: str
+
+
+class TrainingEventsPage(ContractModel):
+    """Durable event page used by polling clients before opening SSE.
+
+    轮询客户端在建立 SSE 连接前使用的持久事件分页。
+    """
+
+    events: list[TrainingEventResource]
+    after_sequence: int = Field(ge=0)
+    next_sequence: int = Field(ge=0)
+    terminal: bool = False
+    state: RunState
+
+
+DiagnosticSource = Literal["product", "trainer", "runtime", "platform"]
+DiagnosticStream = Literal["stdout", "stderr", "combined"]
+DiagnosticLevel = Literal["debug", "info", "warn", "error"]
+
+
+class DiagnosticRecord(ContractModel):
+    """One redacted diagnostic line a console may show verbatim.
+
+    Raw trainer output never reaches the browser: the message is redacted on the
+    way in, and the page carries no path, credential, or environment content.
+
+    控制台可以直接展示的一条脱敏诊断行。
+
+    原始 trainer 输出绝不会发送到浏览器:消息在写入时脱敏,分页中也不包含路径、凭证或环境内容。
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+    sequence: int = Field(ge=1)
+    timestamp: str
+    level: DiagnosticLevel = "info"
+    source: DiagnosticSource = "trainer"
+    stream: DiagnosticStream = "combined"
+    code: str | None = Field(default=None, max_length=200)
+    message: str = Field(default="", max_length=8192)
+    request_id: str | None = Field(default=None, max_length=200)
+    operation_id: str | None = Field(default=None, max_length=200)
+    resource_id: str | None = Field(default=None, max_length=200)
+    attempt_id: str | None = Field(default=None, max_length=200)
+    truncated: bool = False
+
+
+class DiagnosticsPage(ContractModel):
+    """One page of diagnostics for a single resource. | 单个资源的诊断分页。"""
+
+    resource_id: str
+    items: list[DiagnosticRecord] = Field(default_factory=list)
+    next_sequence: int = Field(ge=0)
+    terminal: bool = False
+    diagnostics_degraded: bool = False
+
+
+PreflightItemStatus = Literal["PASS", "WARN", "FAIL", "UNKNOWN"]
+
+
+class PreflightItem(ContractModel):
+    """One preflight observation with a user-facing reason. | 包含面向用户原因说明的一项预检观察结果。"""
+
+    id: str = Field(min_length=1, max_length=200)
+    status: PreflightItemStatus
+    message: str = Field(min_length=1, max_length=2000)
+    remediation: str | None = Field(
+        default=None, max_length=2000, exclude_if=lambda value: value is None
+    )
+
+
+class PreflightReport(ContractModel):
+    """Aggregated preflight outcome for one TrainingRun. | 单个 TrainingRun 的汇总预检结果。"""
+
+    status: Literal["PASS", "WARN", "FAIL"]
+    items: list[PreflightItem]
+    checked_at: datetime
+
+
+class ResumeTrainingRun(ContractModel):
+    """Explicit manual resume from a complete checkpoint. | 基于完整 checkpoint 明确发起的手动恢复请求。"""
+
+    checkpoint_artifact: ArtifactRef | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    checkpoint_name: str | None = Field(
+        default=None, min_length=1, max_length=200, exclude_if=lambda value: value is None
+    )
+
+
+class GatewayRouteDraftReceipt(ContractModel):
+    """Exchange route draft created from a training result. | 训练结果的路由草稿回执。"""
+
+    route_id: UUID
+    draft_url: str = Field(min_length=1, max_length=2000)
+
+
+class SendTrainingResultToExchange(ContractModel):
+    """Explicit Send using a verified Reactor Endpoint URI. | 使用已校验 Reactor 端点发送。"""
+
+    model_alias: str = Field(min_length=1, max_length=200)
+    endpoint_url: str = Field(pattern=r"^https?://", max_length=2000)
+    target_model: str | None = Field(default=None, min_length=1, max_length=200)
+    gateway_endpoint_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    target_binding_id: str | None = Field(default=None, min_length=1, max_length=300)
+    model_pattern: str | None = Field(default=None, min_length=1, max_length=200)
+    priority: int = Field(default=100, ge=0, le=10_000)

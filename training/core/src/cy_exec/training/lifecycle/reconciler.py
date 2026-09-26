@@ -1,16 +1,22 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/lifecycle/reconciler.py
+# ║ 文件:training/core/src/cy_exec/training/lifecycle/reconciler.py
 # ║ Module: Cyrene Yield
+# ║ 模块:Cyrene Yield
 # ║ Role: Product-owned training reconciliation policy.
+# ║ 职责:Product 所有的训练 reconciliation 策略。
 # ║
 # ║ 模块：Cyrene Yield
 # ║ 职责：训练产品拥有的协调策略。
 # ╚══════════════════════════════════════════════════════════════════════╝
-"""Generic desired-versus-observed Product reconciliation."""
+"""Generic desired-versus-observed Product reconciliation.
+
+通用的 Product 期望状态与观测状态协调。
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
@@ -52,7 +58,10 @@ class ReconcileAction:
 
 
 class ProductReconciler:
-    """Pure policy: compare desired state to observations and choose one next action."""
+    """Pure policy: compare desired state to observations and choose one next action.
+
+    纯策略逻辑:比较期望状态与观测结果,并选择一个下一步动作。
+    """
 
     def next_action(self, plan: ExecutionPlan, run: ProductRun) -> ReconcileAction:
         if run.terminal:
@@ -140,7 +149,10 @@ class ProductReconciler:
 
 
 class ProductControlPlane:
-    """Small application service over the persistence port and pure reconciler."""
+    """Small application service over the persistence port and pure reconciler.
+
+    位于持久化端口与纯 reconciler 之上的小型应用服务。
+    """
 
     def __init__(self, store: ControlPlaneStore, reconciler: Optional[ProductReconciler] = None) -> None:
         self._store = store
@@ -179,6 +191,36 @@ class ProductControlPlane:
         updated = (
             run.with_attempt(attempt)
             .with_step_status(action.step_id, StepStatus.RUNNING)
+            .with_observed_status(PlanStatus.RUNNING)
+        )
+        self._store.compare_and_set(updated, run.generation)
+        return attempt
+
+    def resume_attempt(self, run_id: str, step_id: str) -> Attempt:
+        """Rewind a stopped ProductRun and append one explicit manual Attempt.
+
+        Only terminal or awaiting-retry runs that still hold a complete
+        checkpoint are resumed by the owning Product; this method performs the
+        generic state transition and keeps all previous Attempts immutable.
+
+        只有仍持有完整 checkpoint 的终态或 awaiting-retry run 才能由所属 Product 恢复;
+        此方法执行通用状态转换并追加一个新 Attempt,所有历史 Attempt 均保持不可变。
+        """
+
+        run = self._store.load_run(run_id)
+        if run.observed_status not in {
+            PlanStatus.FAILED,
+            PlanStatus.CANCELLED,
+            PlanStatus.AWAITING_RETRY,
+        }:
+            raise ValueError(f"ProductRun {run_id} is not resumable in status {run.observed_status.value}")
+        self._store.load_plan(run.plan_id).step(step_id)
+        attempt_number = AttemptNumber(len(run.attempts) + 1)
+        attempt = Attempt(AttemptId(f"{run.run_id}:{int(attempt_number)}"), run.run_id, attempt_number, step_id)
+        rewound = replace(run, desired_state=DesiredState.ACTIVE, observed_status=PlanStatus.RUNNING)
+        updated = (
+            rewound.with_attempt(attempt)
+            .with_step_status(step_id, StepStatus.RUNNING)
             .with_observed_status(PlanStatus.RUNNING)
         )
         self._store.compare_and_set(updated, run.generation)
