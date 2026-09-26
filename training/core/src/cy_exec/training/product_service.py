@@ -327,7 +327,13 @@ class YieldService:
                 return draft
         raise KeyError(str(identifier))
 
-    def get_run(self, identifier: UUID) -> TrainingRunResource:
+    def get_run(
+        self,
+        identifier: UUID,
+        *,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> TrainingRunResource:
         draft = self._draft_for_run(identifier)
         configuration = draft.configuration
         assert configuration is not None
@@ -350,7 +356,7 @@ class YieldService:
             # every terminal observation is recorded, not only a published result.
             self.store.record_terminal_run(identifier, state)
         artifacts = self.control.output_artifacts(run.run_id)
-        result = self._result(draft, artifacts) if state == "COMPLETED" else None
+        result = self._result(draft, artifacts, trace_id=trace_id, span_id=span_id) if state == "COMPLETED" else None
         lineage = [configuration.base_model.artifact.digest, draft.dataset_version.artifact.digest]
         kinds: dict[str, ProducedKind] = {
             "model": "MODEL_ADAPTER",
@@ -768,7 +774,14 @@ class YieldService:
             raise ValueError("YIELD_EXCHANGE_SOURCE_MISMATCH: Reactor deployment is not this training result")
         return endpoint, deployment
 
-    def _result(self, draft: TrainingDraft, artifacts: dict[str, Any]) -> TrainingResultResource:
+    def _result(
+        self,
+        draft: TrainingDraft,
+        artifacts: dict[str, Any],
+        *,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> TrainingResultResource:
         assert draft.training_run is not None and draft.configuration is not None
         identifier = uuid5(NAMESPACE_URL, draft.training_run.uri + "/result")
         try:
@@ -779,6 +792,8 @@ class YieldService:
                     level="INFO",
                     event_name="yield.training.result_cache_miss",
                     message="No cached training result found in store; proceeding with generation",
+                    trace_id=trace_id,
+                    span_id=span_id,
                     attributes={"result_id": str(identifier)},
                 )
                 + "\n"

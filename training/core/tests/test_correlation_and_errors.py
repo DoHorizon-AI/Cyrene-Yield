@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,6 +26,7 @@ from cy_exec.training.logging import (
     sanitize_correlation_id,
     sanitize_request_id,
 )
+from cy_exec.training.lifecycle.contracts import PlanStatus
 from cy_exec.training.product_api import create_app
 from cy_exec.training.product_store import ProductStore
 
@@ -159,3 +163,45 @@ def test_startup_purge_failure_emits_structured_diagnostic(monkeypatch, capsys, 
     assert error["attributes"]["cause_kind"] == "OperationalError"
     assert len(error["trace_id"]) == 32
     assert "private database path" not in error["message"]
+
+
+def test_result_cache_miss_keeps_request_trace(monkeypatch, capsys, tmp_path: Path) -> None:
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    span_id = "00f067aa0ba902b7"
+    run_id = uuid4()
+    app = create_app(state_directory=tmp_path / "state", artifact_root=tmp_path / "artifacts")
+    service = app.state.yield_service
+    draft = SimpleNamespace(
+        training_run=SimpleNamespace(uri=f"training-runs/{run_id}"),
+        configuration=object(),
+    )
+    completed = SimpleNamespace(run_id=f"run-{run_id}", observed_status=PlanStatus.SUCCEEDED)
+    monkeypatch.setattr(service, "_draft_for_run", lambda _identifier: draft)
+    monkeypatch.setattr(service.control, "load", lambda _run_id: completed)
+    monkeypatch.setattr(service.control, "output_artifacts", lambda _run_id: {})
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/v1/training-runs/{run_id}",
+            headers={"traceparent": f"00-{trace_id}-{span_id}-01"},
+        )
+
+    assert response.status_code == 422
+    records = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+    cache_miss = next(record for record in records if record.get("event.name") == "yield.training.result_cache_miss")
+    assert cache_miss["trace_id"] == trace_id
+    assert cache_miss["span_id"] == span_id
+
+
+def test_invalid_retention_timestamp_does_not_log_input_value(capsys, tmp_path: Path) -> None:
+    store = ProductStore(tmp_path / "product.sqlite3")
+    store.save("result", "invalid-result", {"createdAt": "credential=must-not-be-logged"})
+
+    assert store._terminal_run_ids_before(datetime.now(UTC)) == []
+
+    log_line = capsys.readouterr().err
+    record = json.loads(log_line)
+    assert record["event.name"] == "yield.training.terminal_run_parse_failed"
+    assert record["attributes"]["cause_type"] == "ValueError"
+    assert "credential=must-not-be-logged" not in log_line
+    store.close()
