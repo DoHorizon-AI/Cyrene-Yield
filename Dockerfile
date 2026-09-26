@@ -7,6 +7,7 @@
 # ==============================================================================
 
 FROM python:3.12-slim-bookworm AS runtime
+LABEL org.opencontainers.image.source="https://github.com/DoHorizon-AI/Cyrene-Yield"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
