@@ -61,6 +61,12 @@ from .product_service import YieldService
 from .product_store import ProductStore
 from .runtime import TrainingRuntime
 from .workspace_auth import WorkspaceScope, WorkspaceServiceAuthenticator
+from .workspace_projection import (
+    WorkspaceTrainingDraftProjection,
+    WorkspaceTrainingRunProjection,
+    project_workspace_training_draft,
+    project_workspace_training_run,
+)
 
 
 def create_app(
@@ -343,15 +349,15 @@ def create_app(
 
     @app.get(
         "/internal/workspace/v1/training-drafts/{draft_id}",
-        response_model=TrainingDraft,
+        response_model=WorkspaceTrainingDraftProjection,
         response_model_exclude_none=True,
         include_in_schema=False,
     )
     def workspace_get_draft(
         draft_id: UUID,
         scope: WorkspaceScope = Depends(workspace_auth.authorize),
-    ) -> TrainingDraft:
-        return service.get_draft_for_workspace(draft_id, scope)
+    ) -> WorkspaceTrainingDraftProjection:
+        return project_workspace_training_draft(service.get_draft_for_workspace(draft_id, scope))
 
     def get_draft_resource(draft_id: UUID) -> TrainingDraft:
         """Resolve a draft through the same Product service for both route surfaces."""
@@ -389,7 +395,7 @@ def create_app(
 
     @app.post(
         "/internal/workspace/v1/training-drafts/{draft_id}/actions/start",
-        response_model=TrainingRunResource,
+        response_model=WorkspaceTrainingRunProjection,
         status_code=202,
         response_model_exclude_none=True,
         include_in_schema=False,
@@ -397,8 +403,8 @@ def create_app(
     def workspace_start_run(
         draft_id: UUID,
         scope: WorkspaceScope = Depends(workspace_auth.authorize),
-    ) -> TrainingRunResource:
-        return start_run_resource(draft_id, scope)
+    ) -> WorkspaceTrainingRunProjection:
+        return project_workspace_training_run(start_run_resource(draft_id, scope))
 
     def start_run_resource(
         draft_id: UUID,

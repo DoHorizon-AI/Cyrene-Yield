@@ -100,7 +100,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: ./openapi.yaml#/components/schemas/TrainingDraft
+                $ref: '#/components/schemas/WorkspaceTrainingDraftProjection'
         '401':
           description: Workspace service bearer is missing or invalid
         '404':
@@ -152,7 +152,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: ./openapi.yaml#/components/schemas/TrainingRunResource
+                $ref: '#/components/schemas/WorkspaceTrainingRunProjection'
         '401':
           description: Workspace service bearer is missing or invalid
         '404':
@@ -184,3 +184,290 @@ components:
       schema:
         type: string
         maxLength: 200
+  schemas:
+    WorkspaceArtifactProjection:
+      type: object
+      additionalProperties: false
+      required: [digest, sizeBytes, kind]
+      properties:
+        digest:
+          type: string
+          pattern: '^sha256:[0-9a-f]{64}$'
+        sizeBytes:
+          type: integer
+          minimum: 0
+        kind:
+          type: string
+          enum: [generic, model, dataset, checkpoint, training_spec, metrics, merged, quantized, report]
+        manifestDigest:
+          type: string
+          pattern: '^sha256:[0-9a-f]{64}$'
+    WorkspaceDatasetVersionProjection:
+      type: object
+      additionalProperties: false
+      required: [id, resourceVersion, artifact, format]
+      properties:
+        id:
+          type: string
+          format: uuid
+        resourceVersion:
+          type: integer
+          minimum: 1
+        artifact:
+          $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        validationArtifact:
+          $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        format:
+          type: string
+          enum: [ALPACA_JSONL]
+    WorkspaceTrainingParameters:
+      type: object
+      additionalProperties: false
+      required:
+        - epochs
+        - perDeviceBatchSize
+        - gradientAccumulationSteps
+        - learningRate
+        - maxSequenceLength
+        - loraRank
+        - loraAlpha
+        - loraDropout
+        - template
+      properties:
+        epochs:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
+        perDeviceBatchSize:
+          type: integer
+          minimum: 1
+          maximum: 64
+        gradientAccumulationSteps:
+          type: integer
+          minimum: 1
+          maximum: 1024
+        learningRate:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        maxSequenceLength:
+          type: integer
+          minimum: 16
+          maximum: 32768
+        maxSteps:
+          type: integer
+          minimum: 1
+        loraRank:
+          type: integer
+          minimum: 1
+          maximum: 512
+        loraAlpha:
+          type: integer
+          minimum: 1
+        loraDropout:
+          type: number
+          minimum: 0
+          maximum: 1
+        template:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,100}$'
+    WorkspaceBaseModelProjection:
+      type: object
+      additionalProperties: false
+      required: [artifact, sourceRevision]
+      properties:
+        artifact:
+          $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        sourceRevision:
+          type: string
+          pattern: '^[0-9a-f]{40}$'
+    WorkspaceTrainingConfigurationProjection:
+      type: object
+      additionalProperties: false
+      required: [baseModel, parameters]
+      properties:
+        baseModel:
+          $ref: '#/components/schemas/WorkspaceBaseModelProjection'
+        parameters:
+          $ref: '#/components/schemas/WorkspaceTrainingParameters'
+    WorkspaceImportedParametersProjection:
+      type: object
+      additionalProperties: false
+      required: [parameters]
+      properties:
+        parameters:
+          $ref: '#/components/schemas/WorkspaceTrainingParameters'
+    WorkspaceTrainingDraftProjection:
+      type: object
+      additionalProperties: false
+      required: [id, state, name, resourceVersion, datasetVersion, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [DRAFT, PREPARED, STARTED]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[^/\\:]{1,200}$'
+        resourceVersion:
+          type: integer
+          minimum: 1
+        datasetVersion:
+          $ref: '#/components/schemas/WorkspaceDatasetVersionProjection'
+        configuration:
+          $ref: '#/components/schemas/WorkspaceTrainingConfigurationProjection'
+        importedParameters:
+          $ref: '#/components/schemas/WorkspaceImportedParametersProjection'
+        trainingRunId:
+          type: string
+          format: uuid
+        cancellationRequestedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    WorkspaceTrainingParameterProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - epochs
+        - perDeviceBatchSize
+        - gradientAccumulationSteps
+        - learningRate
+        - maxSequenceLength
+      properties:
+        epochs:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
+        perDeviceBatchSize:
+          type: integer
+          minimum: 1
+          maximum: 64
+        gradientAccumulationSteps:
+          type: integer
+          minimum: 1
+          maximum: 1024
+        learningRate:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        maxSequenceLength:
+          type: integer
+          minimum: 16
+          maximum: 32768
+    WorkspaceTrainingSpecProjection:
+      type: object
+      additionalProperties: false
+      required: [modelArtifact, datasetVersion, method, finetuningType, parameters]
+      properties:
+        modelArtifact:
+          $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        datasetVersion:
+          $ref: '#/components/schemas/WorkspaceDatasetVersionProjection'
+        method:
+          type: string
+          enum: [SFT]
+        finetuningType:
+          type: string
+          enum: [LORA]
+        parameters:
+          $ref: '#/components/schemas/WorkspaceTrainingParameterProjection'
+    WorkspaceProducedArtifactProjection:
+      type: object
+      additionalProperties: false
+      required: [kind, artifact, derivedFromDigests]
+      properties:
+        kind:
+          type: string
+          enum: [MODEL_CHECKPOINT, MODEL_ADAPTER, METRICS, TRAINING_MANIFEST]
+        artifact:
+          $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        derivedFromDigests:
+          type: array
+          items:
+            type: string
+            pattern: '^sha256:[0-9a-f]{64}$'
+    WorkspaceTrainingFailureProjection:
+      type: object
+      additionalProperties: false
+      required: [code, retryable]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z0-9_]{1,100}$'
+        retryable:
+          type: boolean
+    WorkspaceTrainingResultProjection:
+      type: object
+      additionalProperties: false
+      required: [id, adapterArtifact, checkpointArtifacts, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        modelVersionDigest:
+          type: string
+          pattern: '^sha256:[0-9a-f]{64}$'
+        adapterArtifact:
+          $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        checkpointArtifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceArtifactProjection'
+        createdAt:
+          type: string
+          format: date-time
+    WorkspaceTrainingRunProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - draftId
+        - state
+        - spec
+        - attemptCount
+        - outputArtifacts
+        - createdAt
+        - updatedAt
+        - resourceVersion
+      properties:
+        id:
+          type: string
+          format: uuid
+        draftId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [QUEUED, RUNNING, COMPLETED, FAILED, CANCELLING, CANCELLED, AWAITING_RETRY]
+        spec:
+          $ref: '#/components/schemas/WorkspaceTrainingSpecProjection'
+        attemptCount:
+          type: integer
+          minimum: 0
+        outputArtifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceProducedArtifactProjection'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resourceVersion:
+          type: integer
+          minimum: 1
+        cancellationRequestedAt:
+          type: string
+          format: date-time
+        result:
+          $ref: '#/components/schemas/WorkspaceTrainingResultProjection'
+        failure:
+          $ref: '#/components/schemas/WorkspaceTrainingFailureProjection'
