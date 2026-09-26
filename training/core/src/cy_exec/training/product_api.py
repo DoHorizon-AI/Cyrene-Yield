@@ -262,6 +262,8 @@ def create_app(
         app.add_exception_handler(kind, failure)
 
     @app.get("/health")
+    @app.get("/healthz")
+    @app.get("/")
     def health() -> dict[str, Any]:
         return {
             "status": "DEGRADED" if background_errors else "READY",
