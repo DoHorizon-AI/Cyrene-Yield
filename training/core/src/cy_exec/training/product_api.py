@@ -22,7 +22,7 @@ from uuid import UUID, uuid4
 import grpc
 import httpx
 from cy_artifacts import ArtifactError, LocalArtifactProvider
-from fastapi import FastAPI, Header, Query, Request
+from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
@@ -60,6 +60,7 @@ from .model_registry import (
 from .product_service import YieldService
 from .product_store import ProductStore
 from .runtime import TrainingRuntime
+from .workspace_auth import WorkspaceScope, WorkspaceServiceAuthenticator
 
 
 def create_app(
@@ -68,6 +69,7 @@ def create_app(
     artifact_root: Path,
     binding_id: str = "llamafactory-sft-lora-v1",
     kernel: KernelTrainingConfiguration | None = None,
+    workspace_credential_map_json: str | None = None,
     reactor_url: str | None = None,
     reactor_bearer_token: str | None = None,
     exchange_url: str | None = None,
@@ -83,6 +85,7 @@ def create_app(
 
     独立构建 Product;实时训练需要显式配置 Kernel 绑定。
     """
+    workspace_auth = WorkspaceServiceAuthenticator(workspace_credential_map_json)
     state_directory.mkdir(parents=True, exist_ok=True)
     owner = (state_directory / "product.lock").open("a")
     if kernel is not None:
@@ -290,6 +293,20 @@ def create_app(
     ) -> TrainingDraft:
         return service.create_draft(command, idempotency_key)
 
+    @app.post(
+        "/internal/workspace/v1/training-drafts",
+        response_model=TrainingDraft,
+        status_code=201,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_import_dataset(
+        command: CreateTrainingDraft,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=200),
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> TrainingDraft:
+        return service.create_draft(command, idempotency_key, workspace_scope=scope)
+
     @app.get("/api/v1/training-drafts", response_model=list[TrainingDraft], response_model_exclude_none=True)
     def list_drafts() -> list[TrainingDraft]:
         return service.list_drafts()
@@ -306,8 +323,38 @@ def create_app(
     ) -> TrainingDraft:
         return service.import_llama_factory_yaml(command, idempotency_key)
 
+    @app.post(
+        "/internal/workspace/v1/training-drafts/actions/import-llama-factory",
+        response_model=TrainingDraft,
+        status_code=201,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_import_llama_factory(
+        command: ImportLlamaFactoryYaml,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=200),
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> TrainingDraft:
+        return service.import_llama_factory_yaml(command, idempotency_key, workspace_scope=scope)
+
     @app.get("/api/v1/training-drafts/{draft_id}", response_model=TrainingDraft, response_model_exclude_none=True)
     def get_draft(draft_id: UUID) -> TrainingDraft:
+        return get_draft_resource(draft_id)
+
+    @app.get(
+        "/internal/workspace/v1/training-drafts/{draft_id}",
+        response_model=TrainingDraft,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_get_draft(
+        draft_id: UUID,
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> TrainingDraft:
+        return service.get_draft_for_workspace(draft_id, scope)
+
+    def get_draft_resource(draft_id: UUID) -> TrainingDraft:
+        """Resolve a draft through the same Product service for both route surfaces."""
         return service.get_draft(draft_id)
 
     @app.get("/api/v1/training-drafts/{draft_id}/exports/llama-factory.yaml")
@@ -318,6 +365,19 @@ def create_app(
     def prepare_draft(draft_id: UUID, command: PrepareTrainingDraft) -> TrainingDraft:
         return service.prepare(draft_id, command)
 
+    @app.patch(
+        "/internal/workspace/v1/training-drafts/{draft_id}",
+        response_model=TrainingDraft,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_prepare_draft(
+        draft_id: UUID,
+        command: PrepareTrainingDraft,
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> TrainingDraft:
+        return service.prepare(draft_id, command, workspace_scope=scope)
+
     @app.post(
         "/api/v1/training-drafts/{draft_id}/actions/start",
         response_model=TrainingRunResource,
@@ -325,11 +385,35 @@ def create_app(
         response_model_exclude_none=True,
     )
     def start_run(draft_id: UUID) -> TrainingRunResource:
+        return start_run_resource(draft_id)
+
+    @app.post(
+        "/internal/workspace/v1/training-drafts/{draft_id}/actions/start",
+        response_model=TrainingRunResource,
+        status_code=202,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_start_run(
+        draft_id: UUID,
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> TrainingRunResource:
+        return start_run_resource(draft_id, scope)
+
+    def start_run_resource(
+        draft_id: UUID,
+        scope: WorkspaceScope | None = None,
+    ) -> TrainingRunResource:
+        """Start the same Product operation regardless of the authenticated route."""
+        if scope is not None:
+            # Resolve scope before checking execution configuration so a private
+            # caller cannot probe another Workspace's draft through this action.
+            service.get_draft_for_workspace(draft_id, scope)
         if not execution_available:
             return _unavailable()
         if executor is not None:
             runtime.update_hardware_facts(executor.hardware_facts())
-        return service.start(draft_id)
+        return service.start(draft_id, workspace_scope=scope)
 
     @app.get("/api/v1/training-runs/{run_id}", response_model=TrainingRunResource, response_model_exclude_none=True)
     def get_run(run_id: UUID, request: Request) -> TrainingRunResource:
@@ -375,6 +459,9 @@ def create_app(
         last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
         cursor = _event_cursor(after_sequence, last_event_id)
+        # Validate before headers are sent; the generator cannot map a later
+        # private-scope failure to the normal Product 404 response.
+        service.require_legacy_run_visibility(run_id)
 
         async def body():
             nonlocal cursor

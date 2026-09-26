@@ -1,0 +1,186 @@
+openapi: 3.1.2
+info:
+  title: Cyrene Yield Workspace Private Product API
+  version: 1.0.0
+  description: >-
+    Private service-to-service routes used by the Workspace Product projection.
+    A configured bearer resolves to a fixed organization and Workspace on the
+    Product server. The bearer authenticates the Platform service only; it
+    carries no user, member, or role identity.
+paths:
+  /internal/workspace/v1/training-drafts:
+    post:
+      operationId: workspaceCreateTrainingDraft
+      summary: Create a scoped Yield-owned TrainingDraft
+      description: >-
+        Product assigns the authenticated organization and Workspace scope;
+        caller-supplied workspace fields are ignored. Resource, scope provenance,
+        and idempotency receipt are committed in one ProductStore transaction.
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./openapi.yaml#/components/schemas/CreateTrainingDraft
+      responses:
+        '201':
+          description: Scoped Product-owned TrainingDraft created or replayed
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/TrainingDraft
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '409':
+          description: Idempotency key conflicts with a different request
+        '422':
+          description: Draft request is invalid
+        '503':
+          description: Workspace service credential is not configured
+  /internal/workspace/v1/training-drafts/actions/import-llama-factory:
+    post:
+      operationId: workspaceImportLlamaFactory
+      summary: Create a scoped draft from an admitted LLaMA Factory YAML subset
+      description: Product assigns scope from the authenticated service credential.
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, datasetVersion, yaml]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                datasetVersion:
+                  $ref: ./openapi.yaml#/components/schemas/DatasetVersionRef
+                yaml:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000000
+      responses:
+        '201':
+          description: Scoped Product-owned TrainingDraft created or replayed
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/TrainingDraft
+        '400':
+          description: YAML contains a field or value outside the admitted subset
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '409':
+          description: Idempotency key conflicts with a different request
+        '422':
+          description: Draft request is invalid
+        '503':
+          description: Workspace service credential is not configured
+  /internal/workspace/v1/training-drafts/{draft_id}:
+    get:
+      operationId: workspaceGetDraft
+      summary: Read one scoped Yield-owned TrainingDraft
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/DraftId'
+      responses:
+        '200':
+          description: Current Product-owned TrainingDraft projection
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/TrainingDraft
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '404':
+          description: TrainingDraft does not exist in the authenticated scope
+        '503':
+          description: Workspace service credential is not configured
+    patch:
+      operationId: workspacePrepareDraft
+      summary: Prepare a scoped TrainingDraft
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/DraftId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./openapi.yaml#/components/schemas/PrepareTrainingDraft
+      responses:
+        '200':
+          description: Scoped draft updated by its Product owner
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/TrainingDraft
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '404':
+          description: TrainingDraft does not exist in the authenticated scope
+        '422':
+          description: Preparation request or referenced Artifact is invalid
+        '503':
+          description: Workspace service credential is not configured
+  /internal/workspace/v1/training-drafts/{draft_id}/actions/start:
+    post:
+      operationId: workspaceStartRun
+      summary: Start the Yield-owned run for a scoped TrainingDraft
+      description: >-
+        Preserves the existing 202 Product response. This operation does not
+        declare an Idempotency-Key or a server-side idempotency guarantee.
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/DraftId'
+      responses:
+        '202':
+          description: Product accepted the run start request
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/TrainingRunResource
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '404':
+          description: TrainingDraft does not exist in the authenticated scope
+        '422':
+          description: Draft is not prepared or the Product operation is invalid
+        '503':
+          description: Workspace service credential or execution is unavailable
+components:
+  securitySchemes:
+    WorkspaceServiceBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        A dedicated high-entropy service credential whose SHA-256 digest is
+        configured with one fixed organizationId and workspaceId on Yield.
+  parameters:
+    DraftId:
+      name: draft_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 200

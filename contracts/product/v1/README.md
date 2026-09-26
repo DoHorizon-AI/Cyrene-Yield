@@ -67,6 +67,40 @@ Cyrene-defined replay key and conflicting body reuse returns a stable
 Deprecation, migration window, and removal follow the common profile. Changed
 state meaning or cancellation semantics requires v2.
 
+## Workspace private service routes
+
+`workspace-private.openapi.yaml` defines additive private routes for scoped
+draft create/import, get, prepare, and start. Product resolves each bearer to a
+fixed `organizationId` and `workspaceId` from the server-side
+`YIELD_WORKSPACE_CREDENTIAL_MAP` JSON setting. The setting contains only
+SHA-256 token digests, not bearer values. Operators must generate random
+service tokens with at least 32 bytes of entropy. Multiple distinct digests may
+map to one scope during rotation; duplicate digests and malformed maps are
+rejected. Comparisons scan the full configured map, which is limited to 1,024
+credentials and 256 KiB.
+
+```json
+{"version":1,"credentials":[{"tokenSha256":"<lowercase SHA-256 hex>","organizationId":"org-id","workspaceId":"workspace-id"}]}
+```
+
+Product assigns the trusted scope from this mapping and ignores any caller
+`workspaceId`. Draft, scope provenance, and idempotency receipt are written in
+one SQLite transaction. Completed result scope is also persisted with the
+result. Historical and legacy-created unscoped resources are not exposed by
+private routes. Legacy `/api/v1` reads expose only unscoped drafts, runs,
+events, diagnostics, attempts, results, exports, and handoffs; existing legacy
+writes remain unscoped. A private draft's associated run and result therefore
+cannot be read through those legacy paths.
+
+The bearer authenticates the Platform service only; it does not establish a
+user, Workspace member, or role. Missing map configuration returns `503`, an
+unknown bearer returns `401`, and malformed configuration prevents startup.
+The current Container Apps workflow updates images but does not configure this
+secret map or its environment SecretRef. Operators must configure both before
+enabling Platform calls. Starting a run retains its existing `202` response
+and does not claim an `Idempotency-Key` guarantee. Historical unscoped drafts
+must be recreated through a private route before Workspace access.
+
 ## Existing-code mapping and deviations
 
 - `TrainingEngineAdapter` is an existing Yield-local application port, described
@@ -122,6 +156,18 @@ TrainingAttempt：QUEUED -> RUNNING -> COMPLETED | FAILED | LOST | CANCELLING；
 API 根路径为 /api/v1，使用 Workspace 的 product-http-v1 兼容配置。OpenAPI 固定为 3.1.2，JSON Schema 固定为 Draft 2020-12，错误遵循 RFC 9457。创建与取消为异步操作：遵循 RFC 7240 的 Prefer: respond-async 时，返回 202、Preference-Applied: respond-async，以及指向 Product 所有 TrainingRun 的 Location。run 本身是轮询与失败资源；它不是 Kernel Operation。Idempotency-Key 是 Cyrene 定义的重放键；重复使用同一键但请求体冲突时，返回稳定的 YIELD_IDEMPOTENCY_CONFLICT。
 
 弃用、迁移窗口和移除遵循通用兼容配置。状态含义或取消语义改变时必须升至 v2。
+
+## Workspace 私有服务路由
+
+`workspace-private.openapi.yaml` 定义按范围隔离的私有草稿创建/导入、读取、准备和启动路由。Product 从服务端 `YIELD_WORKSPACE_CREDENTIAL_MAP` JSON 配置将每个 Bearer 映射到固定 `organizationId` 和 `workspaceId`。配置只保存 token 的 SHA-256 摘要，不保存 Bearer 明文。运维人员应生成至少 32 字节熵的随机服务 token。凭据轮换时允许多个不同摘要映射到同一范围；重复摘要和格式错误的 map 会被拒绝，比较过程会扫描完整映射；配置最多 1,024 个凭据且最大 256 KiB。
+
+```json
+{"version":1,"credentials":[{"tokenSha256":"<小写 SHA-256 十六进制摘要>","organizationId":"组织 ID","workspaceId":"Workspace ID"}]}
+```
+
+Product 从服务端映射赋予可信范围，并忽略调用方提供的 `workspaceId`。草稿、范围 provenance 和幂等回执在一个 SQLite 事务中写入；完成结果的范围也与结果一起持久化。历史资源和 legacy 创建的无范围资源不会通过私有路由暴露。旧 `/api/v1` 读取只暴露无范围的草稿、运行、事件、诊断、attempt、结果、导出和 handoff；现有 legacy 写入仍创建无范围数据。因此，私有草稿关联的运行与结果不能通过这些旧路由读取。
+
+Bearer 只认证 Platform 服务，不建立用户、Workspace 成员或角色身份。缺少映射配置返回 `503`，未知 Bearer 返回 `401`，格式错误的配置会阻止服务启动。当前 Container Apps workflow 只更新镜像，不配置此 secret map 或环境变量 SecretRef；启用 Platform 调用前，运维人员必须配置二者。启动操作保留原有 `202` 响应，不声称有 `Idempotency-Key` 保证。历史无范围草稿必须通过私有路由重新创建后才能供 Workspace 使用。
 
 ## 既有代码映射与差异
 

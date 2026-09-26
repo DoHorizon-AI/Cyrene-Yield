@@ -64,6 +64,7 @@ from .product_models import (
 )
 from .product_results import compose_result
 from .product_store import ProductStore
+from .workspace_auth import WorkspaceScope
 
 _RESUMABLE_STATES = frozenset({PlanStatus.FAILED, PlanStatus.CANCELLED, PlanStatus.AWAITING_RETRY})
 _TERMINAL_RUN_STATES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
@@ -132,11 +133,19 @@ class YieldService:
         self.reactor_bearer_token = reactor_bearer_token
         self._lock = RLock()
 
-    def create_draft(self, command: CreateTrainingDraft, key: str | None = None) -> TrainingDraft:
+    def create_draft(
+        self,
+        command: CreateTrainingDraft,
+        key: str | None = None,
+        *,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> TrainingDraft:
         """Persist only references; importing never allocates compute or starts work.
 
         只持久化引用;导入不会分配计算资源或启动工作。
         """
+        if workspace_scope is not None:
+            command = command.model_copy(update={"workspace_id": workspace_scope.workspace_id})
         identifier = uuid4()
         draft = TrainingDraft(
             id=identifier,
@@ -152,12 +161,46 @@ class YieldService:
         idempotency_key = (
             key or "dataset:" + hashlib.sha256(f"{source.uri}:{source.resource_version}".encode()).hexdigest()
         )
-        return TrainingDraft.model_validate(self.store.create_draft(idempotency_key, _json(command), _json(draft)))
+        workspace_record_scope = None
+        if workspace_scope is not None:
+            workspace_record_scope = (workspace_scope.organization_id, workspace_scope.workspace_id)
+        return TrainingDraft.model_validate(
+            self.store.create_draft(
+                idempotency_key,
+                _json(command),
+                _json(draft),
+                workspace_scope=workspace_record_scope,
+            )
+        )
 
     def get_draft(self, identifier: UUID) -> TrainingDraft:
+        if self.store.workspace_resource_scope("draft", str(identifier)) is not None:
+            raise KeyError(str(identifier))
         return TrainingDraft.model_validate(self.store.get("draft", str(identifier)))
 
     def list_drafts(self) -> list[TrainingDraft]:
+        return [TrainingDraft.model_validate(item) for item in self.store.list_unscoped("draft")]
+
+    def get_draft_for_workspace(self, identifier: UUID, scope: WorkspaceScope) -> TrainingDraft:
+        """Read a draft only when its immutable ProductStore scope matches."""
+        stored_scope = self.store.workspace_resource_scope("draft", str(identifier))
+        expected_scope = (scope.organization_id, scope.workspace_id)
+        if stored_scope != expected_scope:
+            raise KeyError(str(identifier))
+        draft = TrainingDraft.model_validate(self.store.get("draft", str(identifier)))
+        if draft.workspace_id != scope.workspace_id:
+            raise KeyError(str(identifier))
+        return draft
+
+    def list_drafts_for_workspace(self, scope: WorkspaceScope) -> list[TrainingDraft]:
+        """List private drafts belonging to one authenticated scope."""
+        return [
+            TrainingDraft.model_validate(item)
+            for item in self.store.list_for_workspace("draft", scope.organization_id, scope.workspace_id)
+        ]
+
+    def list_all_drafts_for_reconcile(self) -> list[TrainingDraft]:
+        """Read all Product drafts for internal state reconciliation only."""
         return [TrainingDraft.model_validate(item) for item in self.store.list("draft")]
 
     def list_runs(
@@ -190,12 +233,16 @@ class YieldService:
         self,
         command: ImportLlamaFactoryYaml,
         key: str | None = None,
+        *,
+        workspace_scope: WorkspaceScope | None = None,
     ) -> TrainingDraft:
         """Import only admitted LLaMA Factory fields into a DRAFT resource.
 
         只将获准的 LLaMA Factory 字段导入 DRAFT 资源。
         """
 
+        if workspace_scope is not None:
+            command = command.model_copy(update={"workspace_id": workspace_scope.workspace_id})
         prefill = parse_llama_factory_yaml(command.yaml_text)
         draft_command = CreateTrainingDraft(
             name=command.name,
@@ -203,7 +250,7 @@ class YieldService:
             workspace_id=command.workspace_id,
             imported_parameters=prefill,
         )
-        return self.create_draft(draft_command, key)
+        return self.create_draft(draft_command, key, workspace_scope=workspace_scope)
 
     def export_llama_factory_yaml(self, identifier: UUID) -> str:
         """Export a draft's canonical parameters as LLaMA Factory YAML.
@@ -239,9 +286,19 @@ class YieldService:
             "parameters": imported.parameters if imported else TrainingParameters(),
         }
 
-    def prepare(self, identifier: UUID, command: PrepareTrainingDraft) -> TrainingDraft:
+    def prepare(
+        self,
+        identifier: UUID,
+        command: PrepareTrainingDraft,
+        *,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> TrainingDraft:
         with self._lock:
-            draft = self.get_draft(identifier)
+            draft = (
+                self.get_draft_for_workspace(identifier, workspace_scope)
+                if workspace_scope is not None
+                else self.get_draft(identifier)
+            )
             if draft.training_run is not None:
                 raise ValueError("YIELD_DRAFT_ALREADY_STARTED: create another draft to change training intent")
             self.artifacts.verify(command.base_model.artifact.platform())
@@ -252,15 +309,24 @@ class YieldService:
             self.store.save("draft", str(identifier), _json(draft))
             return draft
 
-    def start(self, identifier: UUID) -> TrainingRunResource:
+    def start(
+        self,
+        identifier: UUID,
+        *,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> TrainingRunResource:
         """The explicit start is the only action that submits a TrainingRun.
 
         只有显式 start 操作会提交 TrainingRun。
         """
         with self._lock:
-            draft = self.get_draft(identifier)
+            draft = (
+                self.get_draft_for_workspace(identifier, workspace_scope)
+                if workspace_scope is not None
+                else self.get_draft(identifier)
+            )
             if draft.training_run is not None:
-                return self.get_run(draft.training_run.id)
+                return self.get_run(draft.training_run.id, workspace_scope=workspace_scope)
             if draft.configuration is None:
                 raise ValueError("YIELD_DRAFT_NOT_PREPARED: select a base model and training parameters")
             spec = self._stage_spec(draft)
@@ -273,7 +339,7 @@ class YieldService:
             run_id = UUID(run.run_id.removeprefix("run-"))
             draft.training_run, draft.state = _ref("training-runs", run_id), "STARTED"
             self.store.save("draft", str(identifier), _json(draft))
-            return self.get_run(run_id)
+            return self.get_run(run_id, workspace_scope=workspace_scope)
 
     def _stage_spec(self, draft: TrainingDraft) -> TrainingSpec:
         configuration = draft.configuration
@@ -321,11 +387,24 @@ class YieldService:
             },
         )
 
-    def _draft_for_run(self, identifier: UUID) -> TrainingDraft:
-        for draft in self.list_drafts():
+    def _draft_for_run(
+        self,
+        identifier: UUID,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> TrainingDraft:
+        drafts = (
+            self.list_drafts_for_workspace(workspace_scope)
+            if workspace_scope is not None
+            else self.list_drafts()
+        )
+        for draft in drafts:
             if draft.training_run is not None and draft.training_run.id == identifier:
                 return draft
         raise KeyError(str(identifier))
+
+    def require_legacy_run_visibility(self, identifier: UUID) -> None:
+        """Reject legacy access to a run whose parent draft has private scope."""
+        self._draft_for_run(identifier)
 
     def get_run(
         self,
@@ -333,8 +412,13 @@ class YieldService:
         *,
         trace_id: str | None = None,
         span_id: str | None = None,
+        workspace_scope: WorkspaceScope | None = None,
     ) -> TrainingRunResource:
-        draft = self._draft_for_run(identifier)
+        draft = (
+            self._draft_for_run(identifier, workspace_scope)
+            if workspace_scope is not None
+            else self._draft_for_run(identifier)
+        )
         configuration = draft.configuration
         assert configuration is not None
         run = self.control.load("run-" + str(identifier))
@@ -356,7 +440,17 @@ class YieldService:
             # every terminal observation is recorded, not only a published result.
             self.store.record_terminal_run(identifier, state)
         artifacts = self.control.output_artifacts(run.run_id)
-        result = self._result(draft, artifacts, trace_id=trace_id, span_id=span_id) if state == "COMPLETED" else None
+        result = (
+            self._result(
+                draft,
+                artifacts,
+                trace_id=trace_id,
+                span_id=span_id,
+                workspace_scope=workspace_scope,
+            )
+            if state == "COMPLETED"
+            else None
+        )
         lineage = [configuration.base_model.artifact.digest, draft.dataset_version.artifact.digest]
         kinds: dict[str, ProducedKind] = {
             "model": "MODEL_ADAPTER",
@@ -569,13 +663,20 @@ class YieldService:
                 return True
         return self.store.diagnostics_degraded(str(identifier))
 
-    def _harvest_events(self, identifier: UUID) -> None:
+    def _harvest_events(
+        self,
+        identifier: UUID,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> None:
         """Persist only the new prefix of each in-process attempt event stream.
 
         仅持久化进程内 attempt 事件流的新增前缀。
         """
 
-        self._draft_for_run(identifier)
+        if workspace_scope is None:
+            self._draft_for_run(identifier)
+        else:
+            self._draft_for_run(identifier, workspace_scope)
         run_id = "run-" + str(identifier)
         run = self.control.load(run_id)
         try:
@@ -781,6 +882,7 @@ class YieldService:
         *,
         trace_id: str | None = None,
         span_id: str | None = None,
+        workspace_scope: WorkspaceScope | None = None,
     ) -> TrainingResultResource:
         assert draft.training_run is not None and draft.configuration is not None
         identifier = uuid5(NAMESPACE_URL, draft.training_run.uri + "/result")
@@ -799,6 +901,13 @@ class YieldService:
                 + "\n"
             )
         else:
+            expected_scope = (
+                (workspace_scope.organization_id, workspace_scope.workspace_id)
+                if workspace_scope is not None
+                else None
+            )
+            if self.store.workspace_resource_scope("result", str(identifier)) != expected_scope:
+                raise KeyError(str(identifier))
             self._register_model_version(result)
             return result
         adapter = artifacts.get("model")
@@ -829,7 +938,14 @@ class YieldService:
             model_version=model.to_dict(),
             created_at=_now(),
         )
-        created = TrainingResultResource.model_validate(self.store.create_result(_json(result)))
+        result_scope = (
+            (workspace_scope.organization_id, workspace_scope.workspace_id)
+            if workspace_scope is not None
+            else None
+        )
+        created = TrainingResultResource.model_validate(
+            self.store.create_result(_json(result), workspace_scope=result_scope)
+        )
         self._register_model_version(created)
         return created
 
@@ -860,7 +976,11 @@ class YieldService:
         self.store.save_receipt(key, digest, registration.to_dict())
 
     def get_result(self, identifier: UUID) -> TrainingResultResource:
+        result_scope = self.store.workspace_resource_scope("result", str(identifier))
+        if result_scope is not None:
+            raise KeyError(str(identifier))
         result = TrainingResultResource.model_validate(self.store.get("result", str(identifier)))
+        self._draft_for_run(result.training_run.id)
         self._register_model_version(result)
         return result
 
@@ -904,12 +1024,14 @@ class YieldService:
 
         只使用现有 controller 对用户明确启动的 run 执行 reconciliation。
         """
-        for draft in self.list_drafts():
+        for draft in self.list_all_drafts_for_reconcile():
             if draft.training_run is None:
                 continue
+            stored_scope = self.store.workspace_resource_scope("draft", str(draft.id))
+            workspace_scope = WorkspaceScope(*stored_scope) if stored_scope is not None else None
             self.control.reconcile_once("run-" + str(draft.training_run.id))
-            self._harvest_events(draft.training_run.id)
-            self.get_run(draft.training_run.id)
+            self._harvest_events(draft.training_run.id, workspace_scope)
+            self.get_run(draft.training_run.id, workspace_scope=workspace_scope)
 
     def send_to_reactor(self, identifier: UUID) -> HandoffReceipt:
         result = self.get_result(identifier)
