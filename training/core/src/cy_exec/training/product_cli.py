@@ -218,6 +218,7 @@ def main() -> None:
         state_directory=args.state_directory,
         artifact_root=artifact_root,
         kernel=kernel,
+        workspace_credential_map_json=os.environ.get("YIELD_WORKSPACE_CREDENTIAL_MAP"),
         reactor_url=args.reactor_url,
         reactor_bearer_token=token,
         exchange_url=args.exchange_url,

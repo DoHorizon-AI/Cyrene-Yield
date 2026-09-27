@@ -44,6 +44,15 @@ class ProductStore:
             self._connection.executescript(
                 "CREATE TABLE IF NOT EXISTS resources(kind TEXT, id TEXT, document TEXT, PRIMARY KEY(kind,id));"
                 "CREATE TABLE IF NOT EXISTS receipts(key TEXT PRIMARY KEY, digest TEXT, id TEXT);"
+                "CREATE TABLE IF NOT EXISTS workspace_draft_receipts("
+                "organization_id TEXT NOT NULL, workspace_id TEXT NOT NULL, key TEXT NOT NULL,"
+                "digest TEXT NOT NULL, id TEXT NOT NULL,"
+                "PRIMARY KEY(organization_id, workspace_id, key));"
+                "CREATE TABLE IF NOT EXISTS workspace_resource_scopes("
+                "kind TEXT NOT NULL, id TEXT NOT NULL, organization_id TEXT NOT NULL, workspace_id TEXT NOT NULL,"
+                "PRIMARY KEY(kind,id));"
+                "CREATE INDEX IF NOT EXISTS ix_workspace_resource_scopes_scope"
+                " ON workspace_resource_scopes(organization_id, workspace_id, kind);"
                 "CREATE TABLE IF NOT EXISTS action_receipts("
                 "key TEXT PRIMARY KEY, digest TEXT NOT NULL, document TEXT NOT NULL);"
                 "CREATE TABLE IF NOT EXISTS training_events("
@@ -80,6 +89,43 @@ class ProductStore:
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def list_unscoped(self, kind: str) -> List[dict[str, Any]]:
+        """List only legacy resources without trusted Workspace provenance."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT resource.document FROM resources AS resource "
+                "LEFT JOIN workspace_resource_scopes AS scope "
+                "ON scope.kind = resource.kind AND scope.id = resource.id "
+                "WHERE resource.kind = ? AND scope.id IS NULL ORDER BY resource.id",
+                (kind,),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def list_for_workspace(
+        self, kind: str, organization_id: str, workspace_id: str
+    ) -> List[dict[str, Any]]:
+        """List resources whose immutable scope exactly matches the caller."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT resource.document FROM resources AS resource "
+                "JOIN workspace_resource_scopes AS scope "
+                "ON scope.kind = resource.kind AND scope.id = resource.id "
+                "WHERE resource.kind = ? AND scope.organization_id = ? AND scope.workspace_id = ? "
+                "ORDER BY resource.id",
+                (kind, organization_id, workspace_id),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def workspace_resource_scope(self, kind: str, resource_id: str) -> tuple[str, str] | None:
+        """Return trusted provenance, or None for legacy/unbound resources."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT organization_id, workspace_id FROM workspace_resource_scopes "
+                "WHERE kind = ? AND id = ?",
+                (kind, resource_id),
+            ).fetchone()
+        return (str(row[0]), str(row[1])) if row else None
+
     def save(self, kind: str, resource_id: str, document: dict[str, Any]) -> None:
         with self._lock, self._connection:
             self._connection.execute(
@@ -91,34 +137,74 @@ class ProductStore:
                 ),
             )
 
-    def create_draft(self, key: str, command: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
+    def create_draft(
+        self,
+        key: str,
+        command: dict[str, Any],
+        document: dict[str, Any],
+        workspace_scope: tuple[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Commit resource and idempotency receipt in the same transaction.
 
         在同一事务中提交资源与幂等回执。
         """
         digest = hashlib.sha256(json.dumps(command, sort_keys=True).encode()).hexdigest()
         with self._lock, self._connection:
-            row = self._connection.execute("SELECT digest,id FROM receipts WHERE key=?", (key,)).fetchone()
+            if workspace_scope is None:
+                row = self._connection.execute("SELECT digest,id FROM receipts WHERE key=?", (key,)).fetchone()
+            else:
+                row = self._connection.execute(
+                    "SELECT digest,id FROM workspace_draft_receipts "
+                    "WHERE organization_id=? AND workspace_id=? AND key=?",
+                    (workspace_scope[0], workspace_scope[1], key),
+                ).fetchone()
             if row:
                 if row[0] != digest:
                     raise ValueError("YIELD_IDEMPOTENCY_CONFLICT: key already identifies another import")
+                if self.workspace_resource_scope("draft", row[1]) != workspace_scope:
+                    raise ValueError("YIELD_WORKSPACE_SCOPE_CONFLICT")
                 return self.get("draft", row[1])
             self._connection.execute(
                 "INSERT INTO resources VALUES(?,?,?)", ("draft", document["id"], json.dumps(document))
             )
-            self._connection.execute("INSERT INTO receipts VALUES(?,?,?)", (key, digest, document["id"]))
+            if workspace_scope is not None:
+                self._connection.execute(
+                    "INSERT INTO workspace_draft_receipts(organization_id,workspace_id,key,digest,id) "
+                    "VALUES (?,?,?,?,?)",
+                    (workspace_scope[0], workspace_scope[1], key, digest, document["id"]),
+                )
+                self._connection.execute(
+                    "INSERT INTO workspace_resource_scopes(kind,id,organization_id,workspace_id) "
+                    "VALUES ('draft',?,?,?)",
+                    (document["id"], workspace_scope[0], workspace_scope[1]),
+                )
+            else:
+                self._connection.execute("INSERT INTO receipts VALUES(?,?,?)", (key, digest, document["id"]))
         return document
 
-    def create_result(self, document: dict[str, Any]) -> dict[str, Any]:
+    def create_result(
+        self,
+        document: dict[str, Any],
+        workspace_scope: tuple[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Keep the first immutable result when reconciliation and reads race.
 
         reconciliation 和读取发生竞争时,保留最早的不可变结果。
         """
         with self._lock, self._connection:
-            self._connection.execute(
+            inserted = self._connection.execute(
                 "INSERT OR IGNORE INTO resources VALUES ('result', ?, ?)",
                 (document["id"], json.dumps(document, sort_keys=True)),
-            )
+            ).rowcount
+            stored_scope = self.workspace_resource_scope("result", document["id"])
+            if inserted and workspace_scope is not None:
+                self._connection.execute(
+                    "INSERT INTO workspace_resource_scopes(kind,id,organization_id,workspace_id) "
+                    "VALUES ('result',?,?,?)",
+                    (document["id"], workspace_scope[0], workspace_scope[1]),
+                )
+            elif stored_scope != workspace_scope:
+                raise ValueError("YIELD_WORKSPACE_SCOPE_CONFLICT")
             training_run = document.get("trainingRun") or document.get("training_run", {})
             run_id = training_run.get("id") if isinstance(training_run, dict) else str(training_run).split("/")[-1]
             if run_id:
