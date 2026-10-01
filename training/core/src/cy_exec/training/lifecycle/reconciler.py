@@ -173,6 +173,11 @@ class ProductControlPlane:
     def load(self, run_id: str) -> ProductRun:
         return self._store.load_run(run_id)
 
+    def list_nonterminal(self) -> list[ProductRun]:
+        """List durable active ProductRuns for source activity reconciliation."""
+
+        return self._store.list_nonterminal()
+
     def load_plan(self, plan_id: str) -> ExecutionPlan:
         return self._store.load_plan(plan_id)
 

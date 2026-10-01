@@ -64,10 +64,18 @@ from .product_models import (
 )
 from .product_results import compose_result
 from .product_store import ProductStore
+from .runtime_activity import start_activity_source
 from .workspace_auth import WorkspaceScope
 
 _RESUMABLE_STATES = frozenset({PlanStatus.FAILED, PlanStatus.CANCELLED, PlanStatus.AWAITING_RETRY})
 _TERMINAL_RUN_STATES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
+_ACTIVITY_STATE_BY_PLAN_STATUS = {
+    PlanStatus.PENDING: "QUEUED",
+    PlanStatus.RUNNING: "RUNNING",
+    PlanStatus.AWAITING_RETRY: "QUEUED",
+    PlanStatus.CANCEL_REQUESTED: "CANCELING",
+    PlanStatus.CANCELLING: "CANCELING",
+}
 # One diagnostics page is capped by both record count and serialized size, so a
 # 每个诊断分页同时受记录数和序列化字节数限制,因此
 # console poll can never pull an unbounded payload.
@@ -132,6 +140,38 @@ class YieldService:
         self._http = http_client or httpx.Client(timeout=30, trust_env=False)
         self.reactor_bearer_token = reactor_bearer_token
         self._lock = RLock()
+        self._terminal_activity_ids: set[str] = set()
+        self._activity_states: dict[str, str] = {}
+        self.activity = start_activity_source(
+            "cyrene-yield",
+            self.list_active_activity_tasks,
+        )
+        self.store.add_close_callback(self.close)
+        if self.activity is not None:
+            self._activity_states = {
+                task["task_id"]: task["state"]
+                for task in self.list_active_activity_tasks()
+            }
+
+    def list_active_activity_tasks(self) -> list[dict[str, str]]:
+        """Project durable nonterminal TrainingRuns into gate-owned task states."""
+
+        tasks = []
+        for run in self.control.list_nonterminal():
+            spec = self.control.spec(run.run_id)
+            state = _ACTIVITY_STATE_BY_PLAN_STATUS.get(run.observed_status)
+            if state is None:
+                raise RuntimeError(
+                    f"unsupported nonterminal Yield ProductRun status: {run.observed_status}"
+                )
+            tasks.append({"task_id": str(spec.job_id), "state": state})
+        return tasks
+
+    def close(self) -> None:
+        """Stop the activity heartbeat during orderly service shutdown."""
+
+        if self.activity is not None:
+            self.activity.close()
 
     def create_draft(
         self,
@@ -330,15 +370,42 @@ class YieldService:
             if draft.configuration is None:
                 raise ValueError("YIELD_DRAFT_NOT_PREPARED: select a base model and training parameters")
             spec = self._stage_spec(draft)
-            try:
-                run = self.control.submit(spec, idempotency_key="product-draft:" + str(identifier))
-            except ValueError as exc:
-                raise ValueError(
-                    "YIELD_ENVIRONMENT_UNAVAILABLE: resolve the configured training environment and host facts"
-                ) from exc
+            post_accept_error: Exception | None = None
+
+            def persist_start():
+                nonlocal post_accept_error
+                try:
+                    accepted_run = self.control.submit(
+                        spec,
+                        idempotency_key="product-draft:" + str(identifier),
+                    )
+                except ValueError as exc:
+                    raise ValueError(
+                        "YIELD_ENVIRONMENT_UNAVAILABLE: resolve the configured training "
+                        "environment and host facts"
+                    ) from exc
+                try:
+                    run_id = UUID(accepted_run.run_id.removeprefix("run-"))
+                    draft.training_run, draft.state = _ref("training-runs", run_id), "STARTED"
+                    self.store.save("draft", str(identifier), _json(draft))
+                except Exception as error:
+                    # The control-plane commit already accepted this ProductRun.
+                    # Keep its gate entry even when the draft link cannot be saved.
+                    post_accept_error = error
+                return accepted_run
+
+            if self.activity is None:
+                run = persist_start()
+            else:
+                run = self.activity.admit_and_persist(
+                    str(identifier),
+                    persist_start,
+                    state="QUEUED",
+                )
+            if post_accept_error is not None:
+                raise post_accept_error
+            self._activity_states[str(identifier)] = "QUEUED"
             run_id = UUID(run.run_id.removeprefix("run-"))
-            draft.training_run, draft.state = _ref("training-runs", run_id), "STARTED"
-            self.store.save("draft", str(identifier), _json(draft))
             return self.get_run(run_id, workspace_scope=workspace_scope)
 
     def _stage_spec(self, draft: TrainingDraft) -> TrainingSpec:
@@ -739,12 +806,40 @@ class YieldService:
             self.artifacts.stage(checkpoint, target)
             if not target.exists() or not any(target.rglob("*")):
                 raise ValueError("YIELD_RESUME_CHECKPOINT_INCOMPLETE: staged checkpoint is empty")
-            self.control.resume(run_id, checkpoint_path=str(target))
-            self.store.save_receipt(
-                receipt_key,
-                digest,
-                {"runId": str(identifier), "checkpointDigest": checkpoint.digest},
-            )
+            post_accept_error: Exception | None = None
+
+            def persist_resume():
+                nonlocal post_accept_error
+                resumed_run = self.control.resume(run_id, checkpoint_path=str(target))
+                try:
+                    self.store.save_receipt(
+                        receipt_key,
+                        digest,
+                        {"runId": str(identifier), "checkpointDigest": checkpoint.digest},
+                    )
+                except Exception as error:
+                    # The controller has already durably appended the resumed Attempt.
+                    post_accept_error = error
+                return resumed_run
+
+            if self.activity is None:
+                persist_resume()
+            elif run.terminal:
+                self.activity.admit_and_persist(
+                    str(draft.id),
+                    persist_resume,
+                    state="QUEUED",
+                )
+            else:
+                self.activity.transition_and_persist(
+                    str(draft.id),
+                    "DISPATCHING",
+                    persist_resume,
+                )
+            if post_accept_error is not None:
+                raise post_accept_error
+            self._terminal_activity_ids.discard(str(draft.id))
+            self._activity_states[str(draft.id)] = "DISPATCHING"
         return self.get_run(identifier)
 
     def send_to_exchange(
@@ -1013,10 +1108,21 @@ class YieldService:
     def cancel(self, identifier: UUID) -> TrainingRunResource:
         with self._lock:
             draft = self._draft_for_run(identifier)
-            if draft.cancellation_requested_at is None:
-                draft.cancellation_requested_at = _now()
-                self.store.save("draft", str(draft.id), _json(draft))
-            self.control.request_cancel("run-" + str(identifier))
+            def persist_cancel() -> None:
+                if draft.cancellation_requested_at is None:
+                    draft.cancellation_requested_at = _now()
+                    self.store.save("draft", str(draft.id), _json(draft))
+                self.control.request_cancel("run-" + str(identifier))
+
+            if self.activity is None:
+                persist_cancel()
+            else:
+                self.activity.transition_and_persist(
+                    str(draft.id),
+                    "CANCELING",
+                    persist_cancel,
+                )
+                self._activity_states[str(draft.id)] = "CANCELING"
         return self.get_run(identifier)
 
     def advance(self) -> None:
@@ -1024,14 +1130,61 @@ class YieldService:
 
         只使用现有 controller 对用户明确启动的 run 执行 reconciliation。
         """
-        for draft in self.list_all_drafts_for_reconcile():
-            if draft.training_run is None:
-                continue
-            stored_scope = self.store.workspace_resource_scope("draft", str(draft.id))
-            workspace_scope = WorkspaceScope(*stored_scope) if stored_scope is not None else None
-            self.control.reconcile_once("run-" + str(draft.training_run.id))
-            self._harvest_events(draft.training_run.id, workspace_scope)
-            self.get_run(draft.training_run.id, workspace_scope=workspace_scope)
+        with self._lock:
+            for draft in self.list_all_drafts_for_reconcile():
+                if draft.training_run is None:
+                    continue
+                stored_scope = self.store.workspace_resource_scope("draft", str(draft.id))
+                workspace_scope = (
+                    WorkspaceScope(*stored_scope) if stored_scope is not None else None
+                )
+                run_id = "run-" + str(draft.training_run.id)
+                current = self.control.load(run_id)
+                task_id = str(draft.id)
+                if current.terminal:
+                    if (
+                        self.activity is not None
+                        and task_id not in self._terminal_activity_ids
+                    ):
+                        self.activity.complete_after_persist(task_id, lambda: None)
+                        self._terminal_activity_ids.add(task_id)
+                        self._activity_states.pop(task_id, None)
+                    run = current
+                elif self.activity is None:
+                    run = self.control.reconcile_once(run_id)
+                else:
+                    state = _ACTIVITY_STATE_BY_PLAN_STATUS[current.observed_status]
+                    if current.observed_status in {
+                        PlanStatus.PENDING,
+                        PlanStatus.AWAITING_RETRY,
+                    }:
+                        state = "DISPATCHING"
+                    if self._activity_states.get(task_id) != state:
+                        run = self.activity.transition_and_persist(
+                            task_id,
+                            state,
+                            lambda: self.control.reconcile_once(run_id),
+                        )
+                        self._activity_states[task_id] = state
+                    else:
+                        run = self.control.reconcile_once(run_id)
+                    if run.terminal:
+                        self.activity.complete_after_persist(task_id, lambda: None)
+                        self._terminal_activity_ids.add(task_id)
+                        self._activity_states.pop(task_id, None)
+                    else:
+                        updated_state = _ACTIVITY_STATE_BY_PLAN_STATUS.get(
+                            run.observed_status
+                        )
+                        if updated_state in {"RUNNING", "CANCELING"} and updated_state != state:
+                            self.activity.transition_and_persist(
+                                task_id,
+                                updated_state,
+                                lambda: None,
+                            )
+                            self._activity_states[task_id] = updated_state
+                self._harvest_events(draft.training_run.id, workspace_scope)
+                self.get_run(draft.training_run.id, workspace_scope=workspace_scope)
 
     def send_to_reactor(self, identifier: UUID) -> HandoffReceipt:
         result = self.get_result(identifier)
