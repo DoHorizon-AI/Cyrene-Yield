@@ -19,7 +19,7 @@ dependencies = [
     "grpcio==1.83.0",
     "protobuf==7.36.0",
     "cryptography==50.0.1",
-    "cyrene-plugin-runtime @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@3aa7b2b2f6ba9f1d5b12a0ce49a88196b6970431#subdirectory=sdk/python/cyrene_plugin_runtime",
+    "cyrene-plugin-runtime @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@bbe533038d14c6f86758c233296b692baedbcc06#subdirectory=sdk/python/cyrene_plugin_runtime",
 ]
 
 [project.scripts]
