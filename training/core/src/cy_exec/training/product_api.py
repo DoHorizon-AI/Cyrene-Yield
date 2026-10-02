@@ -284,12 +284,32 @@ def create_app(
     @app.get("/healthz")
     @app.get("/")
     def health() -> dict[str, Any]:
-        return {
-            "status": "DEGRADED" if background_errors else "READY",
+        execution_ready = False
+        execution_detail = None
+        if kernel is not None:
+            try:
+                kernel.capabilities()
+                execution_ready = True
+            except Exception as exc:
+                execution_ready = False
+                execution_detail = str(exc)
+        elif control is not None:
+            execution_ready = True
+
+        api_ready = len(background_errors) == 0
+        overall_ready = api_ready and (execution_ready if execution_available else True)
+
+        response: dict[str, Any] = {
+            "status": "READY" if overall_ready else "DEGRADED",
+            "apiReady": api_ready,
+            "executionReady": execution_ready,
             "trainingConfigured": execution_available,
             "modelRegistryConfigured": registry is not None,
             "reconcileErrors": list(background_errors),
         }
+        if execution_detail:
+            response["executionDetail"] = execution_detail
+        return response
 
     @app.post(
         "/api/v1/training-drafts", response_model=TrainingDraft, status_code=201, response_model_exclude_none=True
