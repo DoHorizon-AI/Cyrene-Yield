@@ -279,6 +279,12 @@ def test_scoped_run_and_associated_result_are_hidden_from_every_legacy_read(tmp_
             )
             assert started.status_code == 202, started.text
             run_id = started.json()["id"]
+            replayed_start = await client.post(
+                f"/internal/workspace/v1/training-drafts/{draft_id}/actions/start",
+                headers={**headers, "Idempotency-Key": "retry-private-run"},
+            )
+            assert replayed_start.status_code == 202, replayed_start.text
+            assert replayed_start.json()["id"] == run_id
             for _ in range(14):
                 app.state.yield_service.advance()
 
@@ -286,6 +292,66 @@ def test_scoped_run_and_associated_result_are_hidden_from_every_legacy_read(tmp_
                 f"/internal/workspace/v1/training-drafts/{draft_id}", headers=headers
             )
             assert private_read.status_code == 200
+            scoped_run = await client.get(
+                f"/internal/workspace/v1/training-runs/{run_id}", headers=headers
+            )
+            assert scoped_run.status_code == 200, scoped_run.text
+            assert scoped_run.json()["organizationId"] == "org-one"
+            assert scoped_run.json()["workspaceId"] == "workspace-one"
+            assert scoped_run.json()["trainingRunId"] == run_id
+            assert scoped_run.json()["id"] == run_id
+
+            event_page = await client.post(
+                f"/internal/workspace/v1/training-runs/{run_id}/events/query",
+                headers=headers,
+                json={"afterSequence": 0, "limit": 1},
+            )
+            assert event_page.status_code == 200, event_page.text
+            event_document = event_page.json()
+            assert event_document["organizationId"] == "org-one"
+            assert event_document["workspaceId"] == "workspace-one"
+            assert event_document["trainingRunId"] == run_id
+            assert len(event_document["events"]) <= 1
+            assert all(item["trainingRunId"] == run_id for item in event_document["events"])
+            assert event_document["nextSequence"] == (
+                event_document["events"][-1]["sequence"] if event_document["events"] else 0
+            )
+            empty_page = await client.post(
+                f"/internal/workspace/v1/training-runs/{run_id}/events/query",
+                headers=headers,
+                json={"afterSequence": 1000000, "limit": 100},
+            )
+            assert empty_page.status_code == 200, empty_page.text
+            assert empty_page.json()["events"] == []
+            assert empty_page.json()["nextSequence"] == 1000000
+            invalid_page = await client.post(
+                f"/internal/workspace/v1/training-runs/{run_id}/events/query",
+                headers=headers,
+                json={"afterSequence": 0, "limit": 101},
+            )
+            assert invalid_page.status_code == 422
+
+            private_attempts = await client.get(
+                f"/internal/workspace/v1/training-runs/{run_id}/attempts", headers=headers
+            )
+            assert private_attempts.status_code == 200, private_attempts.text
+            assert private_attempts.json()["trainingRunId"] == run_id
+            assert all(item["trainingRunId"] == run_id for item in private_attempts.json()["attempts"])
+
+            other_headers = {"Authorization": "Bearer " + other}
+            foreign_reads = [
+                await client.get(f"/internal/workspace/v1/training-runs/{run_id}", headers=other_headers),
+                await client.post(
+                    f"/internal/workspace/v1/training-runs/{run_id}/events/query",
+                    headers=other_headers,
+                    json={"afterSequence": 0, "limit": 10},
+                ),
+                await client.get(
+                    f"/internal/workspace/v1/training-runs/{run_id}/attempts", headers=other_headers
+                ),
+            ]
+            assert [response.status_code for response in foreign_reads] == [404, 404, 404]
+
             private_run = app.state.yield_service.get_run(
                 UUID(run_id),
                 workspace_scope=WorkspaceScope("org-one", "workspace-one"),

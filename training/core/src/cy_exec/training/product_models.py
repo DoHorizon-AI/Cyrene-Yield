@@ -278,6 +278,16 @@ class TrainingEventsPage(ContractModel):
     state: RunState
 
 
+class WorkspaceTrainingEventsQuery(ContractModel):
+    """Bounded event-page request accepted by Workspace Authority invocations.
+
+    Workspace Authority 以一元 JSON invocation 读取有界事件页。
+    """
+
+    after_sequence: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+
+
 DiagnosticSource = Literal["product", "trainer", "runtime", "platform"]
 DiagnosticStream = Literal["stdout", "stderr", "combined"]
 DiagnosticLevel = Literal["debug", "info", "warn", "error"]

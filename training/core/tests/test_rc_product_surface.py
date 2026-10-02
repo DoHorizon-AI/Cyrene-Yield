@@ -124,7 +124,7 @@ def test_yaml_import_export_and_paginated_collection_surface(tmp_path: Path):
     app.state.yield_service.store.close()
 
 
-def test_run_collection_preflight_events_and_terminal_sse(tmp_path: Path):
+def test_run_collection_preflight_events_and_terminal_sse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     provider = LocalArtifactProvider(tmp_path / "artifacts")
     executor = _EventExecutor()
     control = TrainingControlPlane(
@@ -227,6 +227,15 @@ def test_run_collection_preflight_events_and_terminal_sse(tmp_path: Path):
             assert len(events.json()["events"]) >= 2
             first_sequence = events.json()["events"][0]["sequence"]
 
+            # Force multiple durable pages even for this short completed run.
+            # 中文：让这个短任务也分多页返回，防止终态过早截断日志。
+            read_events = app.state.yield_service.events
+
+            def one_event_page(identifier, *, after_sequence=0, limit=5000):
+                return read_events(identifier, after_sequence=after_sequence, limit=1)
+
+            monkeypatch.setattr(app.state.yield_service, "events", one_event_page)
+
             stream = await client.get(
                 f"/api/v1/training-runs/{run_id}/events/stream",
                 headers={"Last-Event-ID": str(first_sequence)},
@@ -235,6 +244,10 @@ def test_run_collection_preflight_events_and_terminal_sse(tmp_path: Path):
             assert stream.headers["content-type"].startswith("text/event-stream")
             assert f"id: {first_sequence}\n" not in stream.text
             assert "event: done" in stream.text
+            for item in events.json()["events"][1:]:
+                assert f"id: {item['sequence']}\nevent: {item['kind']}\n" in stream.text
+            last_sequence = events.json()["events"][-1]["sequence"]
+            assert f"id: {last_sequence}\nevent: done\n" in stream.text
             completed = await client.get(f"/api/v1/training-runs/{run_id}")
             result_id = UUID(completed.json()["result"]["id"])
             result = app.state.yield_service.get_result(result_id)

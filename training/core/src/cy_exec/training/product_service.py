@@ -646,7 +646,14 @@ class YieldService:
         )
         return PreflightReport(status=report_status, items=items, checked_at=_now())
 
-    def events(self, identifier: UUID, *, after_sequence: int = 0, limit: int = 5000) -> TrainingEventsPage:
+    def events(
+        self,
+        identifier: UUID,
+        *,
+        after_sequence: int = 0,
+        limit: int = 5000,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> TrainingEventsPage:
         """Harvest runtime events and return a durable ordered slice.
 
         采集 runtime 事件,并返回持久化的有序切片。
@@ -654,9 +661,9 @@ class YieldService:
 
         if after_sequence < 0:
             raise ValueError("YIELD_EVENT_SEQUENCE_INVALID: after_sequence must be non-negative")
-        self._draft_for_run(identifier)
-        self._harvest_events(identifier)
-        run = self.get_run(identifier)
+        self._draft_for_run(identifier, workspace_scope)
+        self._harvest_events(identifier, workspace_scope)
+        run = self.get_run(identifier, workspace_scope=workspace_scope)
         records = self.store.list_events(str(identifier), after_sequence, limit)
         values = [TrainingEventResource.model_validate(record) for record in records]
         next_sequence = values[-1].sequence if values else after_sequence
@@ -1079,12 +1086,17 @@ class YieldService:
         self._register_model_version(result)
         return result
 
-    def list_attempts(self, identifier: UUID) -> list[TrainingAttemptResource]:
+    def list_attempts(
+        self,
+        identifier: UUID,
+        *,
+        workspace_scope: WorkspaceScope | None = None,
+    ) -> list[TrainingAttemptResource]:
         """Expose stable phase diagnostics without leaking host paths or raw logs.
 
         暴露稳定的阶段诊断,不泄漏主机路径或原始日志。
         """
-        self._draft_for_run(identifier)
+        self._draft_for_run(identifier, workspace_scope)
         run = self.control.load("run-" + str(identifier))
         return [
             TrainingAttemptResource(

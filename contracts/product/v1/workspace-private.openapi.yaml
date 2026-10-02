@@ -140,12 +140,14 @@ paths:
       operationId: workspaceStartRun
       summary: Start the Yield-owned run for a scoped TrainingDraft
       description: >-
-        Preserves the existing 202 Product response. This operation does not
-        declare an Idempotency-Key or a server-side idempotency guarantee.
+        Preserves the existing 202 Product response. The optional request key
+        supports Authority retry deduplication; Yield also guarantees one run
+        per draft using its stable ProductDraft identity.
       security:
         - WorkspaceServiceBearer: []
       parameters:
         - $ref: '#/components/parameters/DraftId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '202':
           description: Product accepted the run start request
@@ -161,6 +163,80 @@ paths:
           description: Draft is not prepared or the Product operation is invalid
         '503':
           description: Workspace service credential or execution is unavailable
+  /internal/workspace/v1/training-runs/{run_id}:
+    get:
+      operationId: workspaceGetRun
+      summary: Read one Yield-owned run in the authenticated Workspace scope
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Current scoped run projection with verified scope identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceScopedTrainingRunProjection'
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '404':
+          description: TrainingRun does not exist in the authenticated scope
+        '503':
+          description: Workspace service credential is not configured
+  /internal/workspace/v1/training-runs/{run_id}/events/query:
+    post:
+      operationId: workspaceListRunEvents
+      summary: Read one bounded event page for a scoped Yield training run
+      description: >-
+        Uses a JSON cursor request so the Workspace unary invocation can carry
+        afterSequence and limit without adding query transport support.
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceTrainingEventsQuery'
+      responses:
+        '200':
+          description: Bounded, run-bound event page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceTrainingEventsPageProjection'
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '404':
+          description: TrainingRun does not exist in the authenticated scope
+        '422':
+          description: Event cursor or page size is invalid
+        '503':
+          description: Workspace service credential is not configured
+  /internal/workspace/v1/training-runs/{run_id}/attempts:
+    get:
+      operationId: workspaceListRunAttempts
+      summary: Read sanitized phase summaries for a scoped Yield training run
+      security:
+        - WorkspaceServiceBearer: []
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Sanitized attempts bound to the requested run and Workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceTrainingAttemptsProjection'
+        '401':
+          description: Workspace service bearer is missing or invalid
+        '404':
+          description: TrainingRun does not exist in the authenticated scope
+        '503':
+          description: Workspace service credential is not configured
 components:
   securitySchemes:
     WorkspaceServiceBearer:
@@ -172,6 +248,13 @@ components:
   parameters:
     DraftId:
       name: draft_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunId:
+      name: run_id
       in: path
       required: true
       schema:
@@ -471,3 +554,183 @@ components:
           $ref: '#/components/schemas/WorkspaceTrainingResultProjection'
         failure:
           $ref: '#/components/schemas/WorkspaceTrainingFailureProjection'
+    WorkspaceScopedTrainingRunProjection:
+      type: object
+      additionalProperties: false
+      required: [id, draftId, state, spec, attemptCount, outputArtifacts, createdAt, updatedAt, resourceVersion, organizationId, workspaceId, trainingRunId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        draftId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [QUEUED, RUNNING, COMPLETED, FAILED, CANCELLING, CANCELLED, AWAITING_RETRY]
+        spec:
+          $ref: '#/components/schemas/WorkspaceTrainingSpecProjection'
+        attemptCount:
+          type: integer
+          minimum: 0
+        outputArtifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceProducedArtifactProjection'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resourceVersion:
+          type: integer
+          minimum: 1
+        cancellationRequestedAt:
+          type: string
+          format: date-time
+        result:
+          $ref: '#/components/schemas/WorkspaceTrainingResultProjection'
+        failure:
+          $ref: '#/components/schemas/WorkspaceTrainingFailureProjection'
+        organizationId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        workspaceId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        trainingRunId:
+          type: string
+          format: uuid
+    WorkspaceTrainingEventsQuery:
+      type: object
+      additionalProperties: false
+      required: [afterSequence, limit]
+      properties:
+        afterSequence:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+    WorkspaceTrainingCheckpointProjection:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        step:
+          type: integer
+          minimum: 0
+        epoch:
+          type: number
+        digest:
+          type: string
+          pattern: '^sha256:[0-9a-f]{64}$'
+        sizeBytes:
+          type: integer
+          minimum: 0
+    WorkspaceTrainingEventProjection:
+      type: object
+      additionalProperties: false
+      required: [sequence, trainingRunId, attemptId, phase, kind, message, timestamp]
+      properties:
+        sequence:
+          type: integer
+          minimum: 1
+        trainingRunId:
+          type: string
+          format: uuid
+        attemptId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        phase:
+          type: string
+          minLength: 1
+          maxLength: 200
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          maxLength: 8192
+        step:
+          type: integer
+          minimum: 0
+        totalSteps:
+          type: integer
+          minimum: 0
+        epoch:
+          type: number
+        loss:
+          type: number
+        learningRate:
+          type: number
+        throughput:
+          type: number
+        etaSeconds:
+          type: number
+        checkpoint:
+          $ref: '#/components/schemas/WorkspaceTrainingCheckpointProjection'
+        timestamp:
+          type: string
+          format: date-time
+    WorkspaceTrainingEventsPageProjection:
+      type: object
+      additionalProperties: false
+      required: [organizationId, workspaceId, trainingRunId, events, afterSequence, nextSequence, terminal, state]
+      properties:
+        organizationId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        workspaceId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        trainingRunId:
+          type: string
+          format: uuid
+        events:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/WorkspaceTrainingEventProjection'
+        afterSequence:
+          type: integer
+          minimum: 0
+        nextSequence:
+          type: integer
+          minimum: 0
+        terminal:
+          type: boolean
+        state:
+          type: string
+          enum: [QUEUED, RUNNING, COMPLETED, FAILED, CANCELLING, CANCELLED, AWAITING_RETRY]
+    WorkspaceTrainingAttemptsProjection:
+      type: object
+      additionalProperties: false
+      required: [organizationId, workspaceId, trainingRunId, attempts]
+      properties:
+        organizationId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        workspaceId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        trainingRunId:
+          type: string
+          format: uuid
+        attempts:
+          type: array
+          maxItems: 100
+          items:
+            $ref: ./openapi.yaml#/components/schemas/TrainingAttemptResource

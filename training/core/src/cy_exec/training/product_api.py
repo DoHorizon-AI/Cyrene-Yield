@@ -22,7 +22,7 @@ from uuid import UUID, uuid4
 import grpc
 import httpx
 from cy_artifacts import ArtifactError, LocalArtifactProvider
-from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi import Body, Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
@@ -44,6 +44,7 @@ from .product_models import (
     TrainingResultResource,
     TrainingRunPage,
     TrainingRunResource,
+    WorkspaceTrainingEventsQuery,
 )
 from .errors import map_yield_error
 from .llama_factory_yaml import LlamaFactoryYamlError
@@ -63,8 +64,14 @@ from .runtime import TrainingRuntime
 from .workspace_auth import WorkspaceScope, WorkspaceServiceAuthenticator
 from .workspace_projection import (
     WorkspaceTrainingDraftProjection,
+    WorkspaceScopedTrainingRunProjection,
+    WorkspaceTrainingAttemptsProjection,
+    WorkspaceTrainingEventsPageProjection,
     WorkspaceTrainingRunProjection,
     project_workspace_training_draft,
+    project_workspace_run_attempts,
+    project_workspace_run_events,
+    project_workspace_scoped_training_run,
     project_workspace_training_run,
 )
 
@@ -402,9 +409,73 @@ def create_app(
     )
     def workspace_start_run(
         draft_id: UUID,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=200),
         scope: WorkspaceScope = Depends(workspace_auth.authorize),
     ) -> WorkspaceTrainingRunProjection:
+        # Yield's stable ProductDraft idempotency key ensures one run per draft;
+        # Authority additionally deduplicates the caller's optional request key.
+        _ = idempotency_key
         return project_workspace_training_run(start_run_resource(draft_id, scope))
+
+    @app.get(
+        "/internal/workspace/v1/training-runs/{run_id}",
+        response_model=WorkspaceScopedTrainingRunProjection,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_get_run(
+        run_id: UUID,
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> WorkspaceScopedTrainingRunProjection:
+        """Read only a run owned by the credential's exact Workspace scope.
+
+        只读取当前服务凭据固定 Workspace 所拥有的任务。
+        """
+
+        run = service.get_run(run_id, workspace_scope=scope)
+        return project_workspace_scoped_training_run(run, scope)
+
+    @app.post(
+        "/internal/workspace/v1/training-runs/{run_id}/events/query",
+        response_model=WorkspaceTrainingEventsPageProjection,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_list_run_events(
+        run_id: UUID,
+        command: WorkspaceTrainingEventsQuery = Body(...),
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> WorkspaceTrainingEventsPageProjection:
+        """Read one bounded durable event page for an exact scoped run.
+
+        读取指定任务的有界持久事件页，并由 POST JSON 适配 Authority unary 调用。
+        """
+
+        page = service.events(
+            run_id,
+            after_sequence=command.after_sequence,
+            limit=command.limit,
+            workspace_scope=scope,
+        )
+        return project_workspace_run_events(page, run_id=run_id, scope=scope)
+
+    @app.get(
+        "/internal/workspace/v1/training-runs/{run_id}/attempts",
+        response_model=WorkspaceTrainingAttemptsProjection,
+        response_model_exclude_none=True,
+        include_in_schema=False,
+    )
+    def workspace_list_run_attempts(
+        run_id: UUID,
+        scope: WorkspaceScope = Depends(workspace_auth.authorize),
+    ) -> WorkspaceTrainingAttemptsProjection:
+        """Read sanitized attempt summaries for one exact scoped run.
+
+        只读取精确 Workspace 任务的脱敏阶段摘要。
+        """
+
+        attempts = service.list_attempts(run_id, workspace_scope=scope)
+        return project_workspace_run_attempts(attempts, run_id=run_id, scope=scope)
 
     def start_run_resource(
         draft_id: UUID,
@@ -478,9 +549,13 @@ def create_app(
                 for event in page.events:
                     cursor = event.sequence
                     yield _sse_event(event.kind, event.sequence, event.model_dump(mode="json", by_alias=True))
-                if page.terminal:
+                # A terminal run can still have more than one durable event page.
+                # 中文：已结束任务的持久事件也可能超过一页，读空后才发送结束帧。
+                if page.terminal and not page.events:
                     yield _sse_event("done", cursor, {"state": page.state, "sequence": cursor})
                     return
+                if page.terminal:
+                    continue
                 await asyncio.sleep(0.2)
 
         return StreamingResponse(

@@ -16,11 +16,15 @@ from pydantic import Field
 from .product_models import (
     ArtifactRef,
     DatasetVersionRef,
+    TrainingAttemptResource,
     TrainingDraft,
+    TrainingEventResource,
+    TrainingEventsPage,
     TrainingParameters,
     TrainingRunResource,
     ContractModel,
 )
+from .workspace_auth import WorkspaceScope
 
 
 class WorkspaceArtifactProjection(ContractModel):
@@ -115,6 +119,201 @@ class WorkspaceTrainingRunProjection(ContractModel):
     cancellation_requested_at: datetime | None = None
     result: WorkspaceTrainingResultProjection | None = None
     failure: WorkspaceTrainingFailureProjection | None = None
+
+
+class WorkspaceScopedTrainingRunProjection(WorkspaceTrainingRunProjection):
+    """Run projection bound to the authenticated Workspace and invocation id.
+
+    将任务响应绑定到已认证 Workspace 与 invocation resource id。
+    """
+
+    organization_id: str = Field(min_length=1, max_length=200)
+    workspace_id: str = Field(min_length=1, max_length=200)
+    training_run_id: UUID
+
+
+class WorkspaceTrainingCheckpointProjection(ContractModel):
+    """Closed checkpoint metadata safe to return through Workspace reads.
+
+    可经 Workspace 读取返回的闭合 checkpoint 元数据。
+    """
+
+    name: str | None = Field(default=None, max_length=200)
+    step: int | None = Field(default=None, ge=0)
+    epoch: float | None = None
+    digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    size_bytes: int | None = Field(default=None, ge=0)
+
+
+class WorkspaceTrainingEventProjection(ContractModel):
+    """Bounded browser-safe event projection without arbitrary payload fields.
+
+    有界浏览器事件投影，不转发任意 payload 字段。
+    """
+
+    sequence: int = Field(ge=1)
+    training_run_id: UUID
+    attempt_id: str = Field(min_length=1, max_length=200)
+    phase: str = Field(min_length=1, max_length=200)
+    kind: str = Field(min_length=1, max_length=100)
+    message: str = Field(max_length=8192)
+    step: int | None = Field(default=None, ge=0)
+    total_steps: int | None = Field(default=None, ge=0)
+    epoch: float | None = None
+    loss: float | None = None
+    learning_rate: float | None = None
+    throughput: float | None = None
+    eta_seconds: float | None = None
+    checkpoint: WorkspaceTrainingCheckpointProjection | None = None
+    timestamp: datetime
+
+
+class WorkspaceTrainingEventsPageProjection(ContractModel):
+    """Workspace-bound event page whose run identity and cursor travel together.
+
+    Workspace 事件页携带任务身份与游标，避免跨任务拼接序号。
+    """
+
+    organization_id: str = Field(min_length=1, max_length=200)
+    workspace_id: str = Field(min_length=1, max_length=200)
+    training_run_id: UUID
+    events: list[WorkspaceTrainingEventProjection] = Field(max_length=100)
+    after_sequence: int = Field(ge=0)
+    next_sequence: int = Field(ge=0)
+    terminal: bool
+    state: Literal["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLING", "CANCELLED", "AWAITING_RETRY"]
+
+
+class WorkspaceTrainingAttemptsProjection(ContractModel):
+    """Workspace-bound attempt list for one exact training run.
+
+    将阶段尝试列表绑定到一个精确训练任务和 Workspace。
+    """
+
+    organization_id: str = Field(min_length=1, max_length=200)
+    workspace_id: str = Field(min_length=1, max_length=200)
+    training_run_id: UUID
+    attempts: list[TrainingAttemptResource] = Field(max_length=100)
+
+
+def project_workspace_scoped_training_run(
+    run: TrainingRunResource,
+    scope: WorkspaceScope,
+) -> WorkspaceScopedTrainingRunProjection:
+    """Bind the owner run projection to the authenticated scope and requested id.
+
+    将 owner run 投影绑定到已认证 scope 和请求中的任务身份。
+    """
+
+    return WorkspaceScopedTrainingRunProjection(
+        **project_workspace_training_run(run).model_dump(),
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        training_run_id=run.id,
+    )
+
+
+def project_workspace_run_events(
+    page: TrainingEventsPage,
+    *,
+    run_id: UUID,
+    scope: WorkspaceScope,
+) -> WorkspaceTrainingEventsPageProjection:
+    """Bind a bounded event page and every event to one authorized run.
+
+    将有界事件页及每条事件绑定到同一个已授权任务。
+    """
+
+    events: list[WorkspaceTrainingEventProjection] = []
+    for event in page.events:
+        if event.training_run_id != run_id:
+            raise ValueError("YIELD_EVENT_RUN_SCOPE_MISMATCH")
+        checkpoint = event.checkpoint or {}
+        checkpoint_projection = WorkspaceTrainingCheckpointProjection(
+            name=_safe_checkpoint_name(checkpoint.get("name", checkpoint.get("checkpointName"))),
+            step=_safe_nonnegative_int(checkpoint.get("step")),
+            epoch=_safe_number(checkpoint.get("epoch")),
+            digest=_safe_digest(checkpoint.get("digest")),
+            size_bytes=_safe_nonnegative_int(checkpoint.get("sizeBytes", checkpoint.get("size_bytes"))),
+        )
+        safe_checkpoint: WorkspaceTrainingCheckpointProjection | None = (
+            checkpoint_projection if checkpoint_projection.model_dump(exclude_none=True) else None
+        )
+        events.append(
+            WorkspaceTrainingEventProjection(
+                sequence=event.sequence,
+                training_run_id=event.training_run_id,
+                attempt_id=event.attempt_id,
+                phase=event.phase,
+                kind=event.kind,
+                message=event.message[:8192],
+                step=event.step,
+                total_steps=event.total_steps,
+                epoch=event.epoch,
+                loss=event.loss,
+                learning_rate=event.learning_rate,
+                throughput=event.throughput,
+                eta_seconds=event.eta_seconds,
+                checkpoint=safe_checkpoint,
+                timestamp=datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")),
+            )
+        )
+    return WorkspaceTrainingEventsPageProjection(
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        training_run_id=run_id,
+        events=events,
+        after_sequence=page.after_sequence,
+        next_sequence=page.next_sequence,
+        terminal=page.terminal,
+        state=page.state,
+    )
+
+
+def project_workspace_run_attempts(
+    attempts: list[TrainingAttemptResource],
+    *,
+    run_id: UUID,
+    scope: WorkspaceScope,
+) -> WorkspaceTrainingAttemptsProjection:
+    """Bind every sanitized attempt to the requested Workspace run.
+
+    将脱敏阶段尝试列表绑定到请求中的 Workspace 任务。
+    """
+
+    if any(attempt.training_run_id != run_id for attempt in attempts):
+        raise ValueError("YIELD_ATTEMPT_RUN_SCOPE_MISMATCH")
+    return WorkspaceTrainingAttemptsProjection(
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        training_run_id=run_id,
+        attempts=attempts,
+    )
+
+
+def _safe_checkpoint_name(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.rsplit("/", 1)[-1].rsplit("\\", 1)[-1][:200]
+
+
+def _safe_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _safe_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        return None
+    number = float(value)
+    return number if number == number and abs(number) != float("inf") else None
+
+
+def _safe_digest(value: Any) -> str | None:
+    if isinstance(value, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+        return value
+    return None
 
 
 _MODEL_VERSION_ID = re.compile(r"^model-version://sha256/([0-9a-f]{64})$")
