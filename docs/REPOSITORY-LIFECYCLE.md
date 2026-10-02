@@ -163,7 +163,7 @@ NVIDIA components, models, datasets, or upstream LLaMA Factory material.
 - **Package / 制品单元**：cyrene-yield。
 - **可部署单元**：是。
 - **Product 单元**：是。
-- **用户分发单元**：是（组件/API package；当前没有发布归档）。
+- **用户分发单元**：是（按精确源码 SHA 发布的组件/API package）。
 - **多仓库依赖**：是。
 
 ---
@@ -172,9 +172,29 @@ NVIDIA components, models, datasets, or upstream LLaMA Factory material.
 
 - **CI 权威来源**：github（GitHub Actions 中自动执行源码与契约检查；Azure 为手动执行）。
 - **Release 角色**：COMPONENT_RELEASE。
-- **Release 权威来源**：github_releases（尚未配置 release 自动化）。
+- **Release 权威来源**：github_releases（`Immutable component release` workflow）。
 - **部署权威来源**：dohorizon_azure。
 - **分发配置**：training、full。
+
+## 3.1 Immutable component delivery / 不可变组件交付
+
+The `Immutable component release` workflow publishes the supported Yield
+component artifacts for the exact source commit. The Azure Container Apps
+workflow accepts only a successful same-repository release run, resolves its
+stable or preview index by that commit, and verifies the pinned Workspace
+catalog, manifest, OCI digest, and GitHub attestation before updating the
+existing `cyrene-yield` app. Manual dispatch uses the current branch and exact
+commit under the same checks. It does not build or push images or create Azure
+apps. Existing OIDC and Workspace-auth safety gates remain in place, as does
+the internal-ingress and healthy-revision check against the immutable image
+digest.
+
+`Immutable component release` workflow 会为精确源码提交发布受支持的 Yield 组件产物。Azure
+Container Apps workflow 只接受同仓库成功的组件发布运行，按该提交查找 stable 或 preview
+index，并在更新已有 `cyrene-yield` app 前验证固定 Workspace catalog、manifest、OCI digest
+与 GitHub attestation。手动触发会使用当前分支和精确提交并执行相同校验。流程不会构建或推送
+镜像，也不会创建 Azure app。现有 OIDC 与 Workspace-auth 安全门禁保持不变，同时保留内网
+ingress 与健康 revision 检查，并核对不可变镜像 digest。
 
 ---
 
@@ -197,7 +217,7 @@ NVIDIA components, models, datasets, or upstream LLaMA Factory material.
 
 锁定的 Platform 修订版已公开，但 Plugins 修订版 3afbac4d386eb7a27f6778149187884820c0b7f6 当前为 private，且多个所有者 package manifest 未声明许可证。因此公开发布必须具备可匿名访问、已完成许可证审查的依赖闭包，并生成新的锁文件。当前仓库策略将此状态记录为 public_requires_private: true。
 
-GitHub 自动检查覆盖干净的 Product core 和契约路径。Azure pipeline 为手动执行，其 GPU 分支需显式启用；NOT_RUN 不代表通过。发布仍需 exact-SHA hosted CI、依赖/SBOM 审查、从 main 创建 release tag，并对规范远程仓库进行 read-back。
+GitHub 自动检查覆盖干净的 Product core 和契约路径。GitHub ACA workflow 只消费通过校验的 exact-SHA OCI 组件发布；补充 Azure pipeline 仍为手动执行，其 GPU 分支需显式启用，NOT_RUN 不代表通过。常规 release 仍需 exact-SHA hosted CI、依赖/SBOM 审查、从 main 创建 release tag，并对规范远程仓库进行 read-back。
 
 plugins/llama-factory-training/data 下历史遗留的 LLaMA Factory 演示数据集被有意排除在此 clean-root 源码内容之外，且未获准公开再分发。源码可见性不授予数据或模型权利；二进制分发还要满足 docs/DEPENDENCIES.md 所述的 release SBOM 和上游许可证门禁。
 
