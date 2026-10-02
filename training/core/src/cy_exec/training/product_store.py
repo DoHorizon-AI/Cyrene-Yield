@@ -12,6 +12,7 @@ import hashlib
 import json
 import sqlite3
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import RLock
@@ -40,6 +41,8 @@ class ProductStore:
         self.log_retention_days = log_retention_days
         self._connection = sqlite3.connect(path, check_same_thread=False)
         self._lock = RLock()
+        self._close_callbacks: list[Callable[[], None]] = []
+        self._closed = False
         with self._connection:
             self._connection.executescript(
                 "CREATE TABLE IF NOT EXISTS resources(kind TEXT, id TEXT, document TEXT, PRIMARY KEY(kind,id));"
@@ -462,5 +465,47 @@ class ProductStore:
                         )
         return sorted(terminal_ids)
 
+    def add_close_callback(self, callback: Callable[[], None]) -> None:
+        """Run a lifecycle cleanup before this store closes its database.
+
+        If the store has already closed, run the callback immediately so the
+        caller cannot leave a newly registered resource alive by mistake.
+
+        中文:注册数据库关闭前的生命周期清理；若 store 已关闭则立即执行。
+        """
+
+        with self._lock:
+            if not self._closed:
+                self._close_callbacks.append(callback)
+                return
+        callback()
+
     def close(self) -> None:
-        self._connection.close()
+        """Run registered cleanup outside the store lock, then close SQLite.
+
+        Callback failures are surfaced after every cleanup is attempted and the
+        database is closed. Repeated calls are harmless and never alter task
+        activity records in the external maintenance broker.
+
+        中文:先在锁外停止生命周期线程，再关闭 SQLite；关闭不代表任务完成。
+        """
+
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            callbacks = tuple(self._close_callbacks)
+            self._close_callbacks.clear()
+
+        errors: list[Exception] = []
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception as error:
+                errors.append(error)
+
+        with self._lock:
+            self._connection.close()
+
+        if errors:
+            raise ExceptionGroup("Yield ProductStore close callback failures", errors)

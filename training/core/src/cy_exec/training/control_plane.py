@@ -11,6 +11,18 @@ from pathlib import Path
 from typing import Dict, Mapping, Optional, Tuple
 
 from cy_artifacts import ArtifactRef
+from cyrene_preflight import PreflightStatus
+
+from .capability_seam import (
+    YIELD_TRAINING_RUNTIME_CAPABILITY,
+    YIELD_TRAINING_RUNTIME_REQUIREMENT,
+    TrainingRuntimeResolver,
+    YieldTrainingRuntimeResolver,
+)
+from .contracts import TrainingSpec, TrainingStatus
+from .contracts.checkpoint import CheckpointSpec
+from .contracts.events import TrainingEvent
+from .environment import EnvironmentLock
 from .lifecycle import (
     Attempt,
     AttemptStatus,
@@ -26,21 +38,9 @@ from .lifecycle import (
     RetryPolicy,
     StepDependency,
 )
-from cyrene_preflight import PreflightStatus
-
-from .contracts import TrainingSpec, TrainingStatus
-from .contracts.checkpoint import CheckpointSpec
-from .contracts.events import TrainingEvent
-from .environment import EnvironmentLock
 from .preflight import TrainingPreflight
 from .runtime import TrainingRuntime
 from .tiny_dry_run import TinyDryRun, TinyDryRunStatus
-from .capability_seam import (
-    YieldTrainingRuntimeResolver,
-    YIELD_TRAINING_RUNTIME_CAPABILITY,
-    YIELD_TRAINING_RUNTIME_REQUIREMENT,
-    TrainingRuntimeResolver,
-)
 
 TRAINING_PRODUCT_KIND = "cyrene.yield.training"
 PREFLIGHT_STEP_ID = "training-preflight"
@@ -164,6 +164,11 @@ class TrainingControlPlane:
 
     def load(self, run_id: str) -> ProductRun:
         return self._control.load(run_id)
+
+    def list_nonterminal(self) -> list[ProductRun]:
+        """List durable nonterminal training runs without exposing the store."""
+
+        return self._control.list_nonterminal()
 
     def spec(self, run_id: str) -> TrainingSpec:
         """Read the immutable validated intent for one ProductRun.

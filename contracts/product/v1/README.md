@@ -175,3 +175,14 @@ Bearer 只认证 Platform 服务，不建立用户、Workspace 成员或角色�
 - 外部 v1 规范使用 ArtifactRef 且省略 engine kind。当前内部 TrainingSpec 仍包含文件系统路径、output_dir 和 EngineKind；在实现可称为契约完整前，需要增加适配器投影。
 - 当前 cyrene.yield.training-runtime.v1 兼容接缝围绕 TrainingRuntime 暴露 submit/poll/cancel，并标记为 MIGRATING_COMPATIBILITY。生产 Plugin 适配器直接使用自身的 owner-scoped 契约；Platform 只提供通用资源、sandbox 和进程生命周期事实。
 - Product runtime 编排和 trainer 行为未改变。针对性修正将 Linux zombie PID 视为已停止；CI 现在通过显式 checkout 路径解析规范 Platform SDK。
+
+## Product operation catalog v2
+
+This Product publishes its Workspace operation catalog at
+[../v2/catalog.json](../v2/catalog.json). Each listed operation binds its exact
+owner operationId to the corresponding OpenAPI source and schema pointers.
+The release manifest pins the catalog and its complete OpenAPI reference closure
+to the same repository commit. This catalog declares operation contracts only;
+Workspace policy controls access independently.
+
+本 Product 在 [../v2/catalog.json](../v2/catalog.json) 发布 Workspace 操作目录。每个目录项都将准确的 owner operationId 绑定到对应的 OpenAPI 文档和 schema pointer。发布清单会将目录及其完整 OpenAPI 引用闭包固定到同一仓库提交。目录只声明操作契约；访问权限由独立的 Workspace policy 控制。
