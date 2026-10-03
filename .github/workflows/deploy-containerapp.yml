@@ -188,7 +188,7 @@ jobs:
         id: catalog
         env:
           CHANNEL: ${{ steps.source.outputs.channel }}
-          CATALOG_RELEASE_ID: ${{ (github.event.workflow_run.head_branch == 'develop' || github.ref == 'refs/heads/develop') && vars.CYRENE_PREVIEW_COMPONENT_CATALOG_RELEASE_ID || vars.CYRENE_STABLE_COMPONENT_CATALOG_RELEASE_ID }}
+          CATALOG_RELEASE_ID: ${{ (steps.source.outputs.channel == 'preview' && vars.CYRENE_PREVIEW_COMPONENT_CATALOG_RELEASE_ID) || (steps.source.outputs.channel == 'stable' && vars.CYRENE_STABLE_COMPONENT_CATALOG_RELEASE_ID) || '' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
