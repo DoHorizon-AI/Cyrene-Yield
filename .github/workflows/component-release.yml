@@ -32,7 +32,7 @@ jobs:
       - run: python -m json.tool service.json >/dev/null
       - run: uvx ruff==0.16.5 check contracts/product/v1/tests
       - run: uvx ruff==0.16.5 format --check contracts/product/v1/tests
-      - run: uvx --from pytest==9.1.1 --with jsonschema==4.26.0 pytest -q contracts/product/v1/tests
+      - run: uvx --from pytest==9.1.1 --with jsonschema==4.26.0 --with pyyaml==6.0.2 pytest -q contracts/product/v1/tests
       - run: uvx --from openapi-spec-validator==0.9.0 openapi-spec-validator contracts/product/v1/openapi.yaml
 
   component-release:
