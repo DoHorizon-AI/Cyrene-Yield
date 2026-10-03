@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "cyrene.product.operation-catalog.v2",
+  "catalogVersion": "2.0.0",
+  "ownerId": "yield",
+  "operations": [
+    {
+      "operationId": "workspaceGetDraft",
+      "routeId": "workspaceGetDraft",
+      "openapiPath": "contracts/product/v1/workspace-private.openapi.yaml",
+      "kind": "READ",
+      "requestSchemaPointer": null,
+      "responseSchemaPointers": [
+        "#/paths/~1internal~1workspace~1v1~1training-drafts~1{draft_id}/get/responses/200/content/application~1json/schema"
+      ],
+      "resourceId": {
+        "required": true,
+        "pathParameter": "draft_id",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": null
+      },
+      "idempotency": {
+        "required": false,
+        "header": null,
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "scope": {
+        "organizationPathParameter": null,
+        "workspacePathParameter": null,
+        "responseBindings": [],
+        "requestBindings": []
+      }
+    },
+    {
+      "operationId": "workspaceGetRun",
+      "routeId": "workspaceGetRun",
+      "openapiPath": "contracts/product/v1/workspace-private.openapi.yaml",
+      "kind": "READ",
+      "requestSchemaPointer": null,
+      "responseSchemaPointers": [
+        "#/paths/~1internal~1workspace~1v1~1training-runs~1{run_id}/get/responses/200/content/application~1json/schema"
+      ],
+      "resourceId": {
+        "required": true,
+        "pathParameter": "run_id",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "idempotency": {
+        "required": false,
+        "header": null,
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "scope": {
+        "organizationPathParameter": null,
+        "workspacePathParameter": null,
+        "requestBindings": [],
+        "responseBindings": [
+          {
+            "jsonPointer": "/organizationId",
+            "matches": "ORGANIZATION_ID"
+          },
+          {
+            "jsonPointer": "/workspaceId",
+            "matches": "WORKSPACE_ID"
+          },
+          {
+            "jsonPointer": "/trainingRunId",
+            "matches": "RESOURCE_ID"
+          },
+          {
+            "jsonPointer": "/id",
+            "matches": "RESOURCE_ID"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "workspaceListRunAttempts",
+      "routeId": "workspaceListRunAttempts",
+      "openapiPath": "contracts/product/v1/workspace-private.openapi.yaml",
+      "kind": "READ",
+      "requestSchemaPointer": null,
+      "responseSchemaPointers": [
+        "#/paths/~1internal~1workspace~1v1~1training-runs~1{run_id}~1attempts/get/responses/200/content/application~1json/schema"
+      ],
+      "resourceId": {
+        "required": true,
+        "pathParameter": "run_id",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "idempotency": {
+        "required": false,
+        "header": null,
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "scope": {
+        "organizationPathParameter": null,
+        "workspacePathParameter": null,
+        "requestBindings": [],
+        "responseBindings": [
+          {
+            "jsonPointer": "/organizationId",
+            "matches": "ORGANIZATION_ID"
+          },
+          {
+            "jsonPointer": "/workspaceId",
+            "matches": "WORKSPACE_ID"
+          },
+          {
+            "jsonPointer": "/trainingRunId",
+            "matches": "RESOURCE_ID"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "workspaceListRunEvents",
+      "routeId": "workspaceListRunEvents",
+      "openapiPath": "contracts/product/v1/workspace-private.openapi.yaml",
+      "kind": "READ",
+      "requestSchemaPointer": "#/paths/~1internal~1workspace~1v1~1training-runs~1{run_id}~1events~1query/post/requestBody/content/application~1json/schema",
+      "responseSchemaPointers": [
+        "#/paths/~1internal~1workspace~1v1~1training-runs~1{run_id}~1events~1query/post/responses/200/content/application~1json/schema"
+      ],
+      "resourceId": {
+        "required": true,
+        "pathParameter": "run_id",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "idempotency": {
+        "required": false,
+        "header": null,
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "scope": {
+        "organizationPathParameter": null,
+        "workspacePathParameter": null,
+        "requestBindings": [],
+        "responseBindings": [
+          {
+            "jsonPointer": "/organizationId",
+            "matches": "ORGANIZATION_ID"
+          },
+          {
+            "jsonPointer": "/workspaceId",
+            "matches": "WORKSPACE_ID"
+          },
+          {
+            "jsonPointer": "/trainingRunId",
+            "matches": "RESOURCE_ID"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "workspaceStartRun",
+      "routeId": "workspaceStartRun",
+      "openapiPath": "contracts/product/v1/workspace-private.openapi.yaml",
+      "kind": "COMMAND",
+      "requestSchemaPointer": null,
+      "responseSchemaPointers": [
+        "#/paths/~1internal~1workspace~1v1~1training-drafts~1{draft_id}~1actions~1start/post/responses/202/content/application~1json/schema"
+      ],
+      "resourceId": {
+        "required": true,
+        "pathParameter": "draft_id",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": null
+      },
+      "idempotency": {
+        "required": false,
+        "header": "Idempotency-Key",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "scope": {
+        "organizationPathParameter": null,
+        "workspacePathParameter": null,
+        "responseBindings": [],
+        "requestBindings": []
+      }
+    }
+  ]
+}

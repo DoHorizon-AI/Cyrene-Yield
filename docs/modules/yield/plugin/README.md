@@ -28,3 +28,30 @@ This Plugins-owned backend provides the optional training engine capability used
 2. 阅读 `src/llamafactory/cli.py` 与 `webui/`，了解产品入口。
 3. 沿 `hparams/`、`data/`、`model/` 与 `train/` 跟踪引擎执行。
 4. 只在排查对应操作时查阅脚本与上游文档。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# LLaMA Factory training Plugin 边界
+
+## 目录用途
+
+此 Plugins 所有的后端提供 Yield 引导式 WebUI 和 CLI 使用的可选训练引擎能力。Yield 通过统一 TrainingRuntime 和 training.llama-factory.v1 DirectPluginRuntime 契约调用它；Plugin 不拥有 Product 级作业状态。
+
+## 文件与职责
+
+| 路径 | 职责 |
+|---|---|
+| Plugin README | Plugin 后端用法与引导工作流 |
+| plugins/training/llama-factory/src/llamafactory/data/ | 数据集与多模态处理 |
+| plugins/training/llama-factory/src/llamafactory/model/ | 模型加载与适配器 |
+| plugins/training/llama-factory/src/llamafactory/train/ | 训练工作流与 trainer |
+| plugins/training/llama-factory/src/llamafactory/webui/ | 引导式训练与适配器合并界面 |
+| plugins/training/llama-factory/scripts/ | 转换、评估和运维脚本 |
+
+## 推荐阅读顺序
+
+1. 阅读 Plugin README 和 CYRENE_IMPROVEMENTS.md。
+2. 阅读 src/llamafactory/cli.py 与 webui/，了解 Product 入口。
+3. 沿 hparams/、data/、model/ 和 train/ 跟踪引擎执行。
+4. 仅在排查相关操作时查阅 scripts 和上游文档。

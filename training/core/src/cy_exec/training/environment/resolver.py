@@ -82,7 +82,10 @@ def _driver_satisfies(actual: Optional[str], minimum: Optional[str]) -> Optional
 
 
 class EnvironmentResolver:
-    """Deterministic rule-based resolver; it never installs dependencies."""
+    """Deterministic rule-based resolver; it never installs dependencies.
+
+    基于规则的确定性解析器,不会安装依赖。
+    """
 
     def resolve(
         self,

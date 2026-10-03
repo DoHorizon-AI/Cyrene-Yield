@@ -28,3 +28,30 @@ The core runtime owns product training contracts, attempt coordination, engine a
 2. 从 `runtime.py` 跟踪到 `preflight.py` 与 `tiny_dry_run.py`。
 3. 阅读引擎适配器与执行器。
 4. 最后阅读检查点/校验模块与测试。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# Yield core runtime
+
+## 目录用途
+
+core runtime 拥有 Product 训练契约、attempt 协调、引擎适配器、执行器、preflight、dry-run 门禁和 checkpoint 发布。
+
+## 文件与职责
+
+| 路径 | 职责 |
+|---|---|
+| training/core/src/cy_exec/training/contracts/ | 稳定的训练领域类型 |
+| training/core/src/cy_exec/training/runtime.py | 训练 attempt 协调器 |
+| training/core/src/cy_exec/training/engines/ | 引擎适配器边界 |
+| training/core/src/cy_exec/training/executors/ | 进程与 Kernel 执行 |
+| training/core/src/cy_exec/training/checkpoint/ | checkpoint 验证与制品 |
+| training/core/tests/ | core 回归测试 |
+
+## 推荐阅读顺序
+
+1. 阅读 contracts/spec.py、contracts/status.py 和 contracts/attempt.py。
+2. 从 runtime.py 跟踪到 preflight.py 和 tiny_dry_run.py。
+3. 阅读引擎适配器与执行器。
+4. 最后阅读 checkpoint 和 validation 模块，然后查看测试。

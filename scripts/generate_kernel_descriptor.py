@@ -21,7 +21,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    """Compile canonical bytes and compare or write their provenance. | 生成并记录来源。"""
+    """Compile canonical bytes and compare or write their provenance. | 编译规范字节,并比较或写入其来源信息。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform-repository", type=Path, required=True)
     parser.add_argument("--check", action="store_true")

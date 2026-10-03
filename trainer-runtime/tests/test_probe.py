@@ -1,4 +1,7 @@
-"""Trainer runtime version and protocol probe regressions."""
+"""Trainer runtime version and protocol probe regressions.
+
+trainer runtime 版本与协议探测回归测试。
+"""
 
 from __future__ import annotations
 
