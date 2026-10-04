@@ -299,7 +299,7 @@ source = { git = "https://github.com/DoHorizon-AI/Cyrene-Platform.git?subdirecto
 [[package]]
 name = "cyrene-compat-rules"
 version = "0.2.0"
-source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fpolicy%2Fcompat-rules&rev=3afbac4d386eb7a27f6778149187884820c0b7f6#3afbac4d386eb7a27f6778149187884820c0b7f6" }
+source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fpolicy%2Fcompat-rules&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1#632e30996f0b403592ae928b7c5ecd1eed1ccbe1" }
 dependencies = [
     { name = "cyrene-plugin-runtime" },
 ]
@@ -307,7 +307,7 @@ dependencies = [
 [[package]]
 name = "cyrene-dataset-validator"
 version = "0.2.0"
-source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Ftools%2Fdataset-validator&rev=3afbac4d386eb7a27f6778149187884820c0b7f6#3afbac4d386eb7a27f6778149187884820c0b7f6" }
+source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Ftools%2Fdataset-validator&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1#632e30996f0b403592ae928b7c5ecd1eed1ccbe1" }
 dependencies = [
     { name = "cyrene-plugin-runtime" },
     { name = "duckdb" },
@@ -316,7 +316,7 @@ dependencies = [
 [[package]]
 name = "cyrene-hf-model-analyzer"
 version = "0.3.0"
-source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fmodels%2Fhf-model-analyzer&rev=3afbac4d386eb7a27f6778149187884820c0b7f6#3afbac4d386eb7a27f6778149187884820c0b7f6" }
+source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fmodels%2Fhf-model-analyzer&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1#632e30996f0b403592ae928b7c5ecd1eed1ccbe1" }
 dependencies = [
     { name = "cyrene-plugin-runtime" },
 ]
@@ -324,7 +324,7 @@ dependencies = [
 [[package]]
 name = "cyrene-plugin-runtime"
 version = "0.2.0"
-source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=sdk%2Fpython%2Fcyrene_plugin_runtime&rev=bbe533038d14c6f86758c233296b692baedbcc06#bbe533038d14c6f86758c233296b692baedbcc06" }
+source = { git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=sdk%2Fpython%2Fcyrene_plugin_runtime&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1#632e30996f0b403592ae928b7c5ecd1eed1ccbe1" }
 dependencies = [
     { name = "grpcio" },
     { name = "protobuf" },
@@ -374,10 +374,10 @@ dev = [
 requires-dist = [
     { name = "cryptography", specifier = "==50.0.1" },
     { name = "cyrene-artifacts", git = "https://github.com/DoHorizon-AI/Cyrene-Platform.git?subdirectory=sdk%2Fpython%2Fcyrene_artifacts&rev=c59be6f2bd82489fbe933dadff84fc589e00afd9" },
-    { name = "cyrene-compat-rules", marker = "extra == 'dev'", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fpolicy%2Fcompat-rules&rev=3afbac4d386eb7a27f6778149187884820c0b7f6" },
-    { name = "cyrene-dataset-validator", marker = "extra == 'dev'", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Ftools%2Fdataset-validator&rev=3afbac4d386eb7a27f6778149187884820c0b7f6" },
-    { name = "cyrene-hf-model-analyzer", marker = "extra == 'dev'", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fmodels%2Fhf-model-analyzer&rev=3afbac4d386eb7a27f6778149187884820c0b7f6" },
-    { name = "cyrene-plugin-runtime", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=sdk%2Fpython%2Fcyrene_plugin_runtime&rev=bbe533038d14c6f86758c233296b692baedbcc06" },
+    { name = "cyrene-compat-rules", marker = "extra == 'dev'", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fpolicy%2Fcompat-rules&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1" },
+    { name = "cyrene-dataset-validator", marker = "extra == 'dev'", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Ftools%2Fdataset-validator&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1" },
+    { name = "cyrene-hf-model-analyzer", marker = "extra == 'dev'", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=plugins%2Fmodels%2Fhf-model-analyzer&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1" },
+    { name = "cyrene-plugin-runtime", git = "https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git?subdirectory=sdk%2Fpython%2Fcyrene_plugin_runtime&rev=632e30996f0b403592ae928b7c5ecd1eed1ccbe1" },
     { name = "cyrene-preflight", git = "https://github.com/DoHorizon-AI/Cyrene-Platform.git?subdirectory=sdk%2Fpython%2Fcyrene_preflight&rev=c59be6f2bd82489fbe933dadff84fc589e00afd9" },
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "grpcio", specifier = "==1.83.0" },

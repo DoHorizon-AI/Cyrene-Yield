@@ -377,3 +377,21 @@ def test_event_snapshot_replays_after_runtime_restart(tmp_path: Path):
     page = restarted.state.yield_service.events(UUID(run_id))
     assert len(page.events) >= 1
     restarted.state.yield_service.store.close()
+
+
+def test_health_endpoint_reports_api_and_execution_readiness(tmp_path: Path) -> None:
+    app = create_app(
+        state_directory=tmp_path / "yield",
+        artifact_root=tmp_path / "artifacts",
+    )
+    from fastapi.testclient import TestClient
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "READY"
+        assert data["apiReady"] is True
+        assert data["executionReady"] is False
+        assert data["trainingConfigured"] is False
+    app.state.yield_service.store.close()
+
