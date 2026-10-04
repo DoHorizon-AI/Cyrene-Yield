@@ -13,6 +13,7 @@ import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import tempfile
 import threading
@@ -44,6 +45,7 @@ class KernelTrainingConfiguration(BaseModel):
     state_directory: Path
     python: Path
     signing_key_file: Path
+    trainer_runtime_manifest: Path | None = None
     minimum_memory_bytes: int = Field(default=1024**3, gt=0)
     allow_wsl_shared_device: bool = False
 
@@ -58,6 +60,7 @@ class KernelExecutionReadiness:
     hardware_facts: HardwareFacts
     system_adapter_available: bool
     hard_gpu_isolation_available: bool
+    trainer_runtime_available: bool
 
     def block_reasons(self, *, minimum_memory_bytes: int) -> list[str]:
         """Return stable reasons this Kernel host cannot execute the v1 GPU profile.
@@ -77,6 +80,8 @@ class KernelExecutionReadiness:
             reasons.append("GPU_UNAVAILABLE")
         if not self.hard_gpu_isolation_available:
             reasons.append("GPU_ISOLATION_UNAVAILABLE")
+        if not self.trainer_runtime_available:
+            reasons.append("TRAINER_RUNTIME_UNAVAILABLE")
         return reasons
 
 
@@ -86,6 +91,38 @@ def _document(value: Any) -> bytes:
 
 def _digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+_TRAINER_RUNTIME_PROFILE = "CYRENE_YIELD_TRAINER_V1_CUDA128"
+_TRAINER_RUNTIME_PACKAGES = (
+    "grpcio",
+    "packaging",
+    "protobuf",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "transformers",
+    "peft",
+    "llamafactory",
+)
+_TRAINER_RUNTIME_IMPORT_CHECK = """\
+import importlib, importlib.metadata, json, os, sys
+data = json.loads(sys.stdin.read())
+expected_python = data['python']
+if not os.path.samefile(sys.executable, expected_python):
+    raise SystemExit('python path differs from trainer manifest')
+expected_prefix = os.path.dirname(os.path.dirname(os.path.abspath(expected_python)))
+if os.path.realpath(sys.prefix) != os.path.realpath(expected_prefix):
+    raise SystemExit('python environment differs from trainer manifest')
+for name, expected in data['packages'].items():
+    if importlib.metadata.version(name) != expected:
+        raise SystemExit('package version differs from trainer manifest: ' + name)
+for module in ('grpc', 'google.protobuf', 'packaging', 'torch', 'torchaudio', 'torchvision',
+               'transformers', 'peft', 'llamafactory.cli'):
+    importlib.import_module(module)
+if not callable(importlib.import_module('llamafactory.cli').main):
+    raise SystemExit('LLaMA-Factory CLI entrypoint is unavailable')
+"""
 
 
 class KernelTrainingExecutor:
@@ -101,6 +138,9 @@ class KernelTrainingExecutor:
         self._stopping = threading.Event()
         self._receipts = configuration.state_directory / "execution-receipts"
         self._receipts.mkdir(parents=True, exist_ok=True)
+        self._trainer_probe_lock = threading.Lock()
+        self._trainer_probe_expires_at = 0.0
+        self._trainer_probe_result = False
         self._renewal = threading.Thread(target=self._renew, daemon=True)
         self._renewal.start()
 
@@ -114,12 +154,85 @@ class KernelTrainingExecutor:
             os.fsync(stream.fileno())
         os.replace(pending, path)
 
-    def execution_readiness(self) -> KernelExecutionReadiness:
+    def trainer_runtime_available(self, *, force: bool = False) -> bool:
+        """Check that the private trainer manifest and its executable environment still agree.
+
+        检查私有 trainer manifest 及其可执行环境当前仍一致。
+        """
+
+        manifest_path = self.configuration.trainer_runtime_manifest
+        if manifest_path is None:
+            return False
+        now = time.monotonic()
+        if not force and now < self._trainer_probe_expires_at:
+            return self._trainer_probe_result
+        with self._trainer_probe_lock:
+            now = time.monotonic()
+            if not force and now < self._trainer_probe_expires_at:
+                return self._trainer_probe_result
+            self._trainer_probe_result = self._probe_trainer_runtime(manifest_path)
+            self._trainer_probe_expires_at = time.monotonic() + 30.0
+            return self._trainer_probe_result
+
+    def _probe_trainer_runtime(self, manifest_path: Path) -> bool:
+        """Run a bounded import and distribution check using the manifest interpreter.
+
+        使用 manifest 指定的解释器执行有时限的导入与 distribution 检查。
+        """
+
+        try:
+            metadata = manifest_path.lstat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != os.getuid()
+            ):
+                return False
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if (
+                not isinstance(manifest, dict)
+                or manifest.get("schemaVersion") != 1
+                or manifest.get("profile") != _TRAINER_RUNTIME_PROFILE
+                or manifest.get("status") != "READY"
+            ):
+                return False
+            manifest_python = manifest.get("python")
+            if not isinstance(manifest_python, str) or not Path(manifest_python).is_absolute():
+                return False
+            python = self.configuration.python
+            if not python.is_file() or not os.access(python, os.X_OK):
+                return False
+            if Path(manifest_python).resolve(strict=True) != python.resolve(strict=True):
+                return False
+            packages = manifest.get("packages")
+            if not isinstance(packages, dict) or any(
+                not isinstance(packages.get(name), str) for name in _TRAINER_RUNTIME_PACKAGES
+            ):
+                return False
+            expected = {
+                "python": manifest_python,
+                "packages": {name: packages[name] for name in _TRAINER_RUNTIME_PACKAGES},
+            }
+            result = subprocess.run(
+                [str(python), "-I", "-c", _TRAINER_RUNTIME_IMPORT_CHECK],
+                input=_document(expected).decode("utf-8"),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+            return result.returncode == 0
+        except (OSError, TypeError, ValueError, json.JSONDecodeError, subprocess.SubprocessError):
+            return False
+
+    def execution_readiness(self, *, trainer_runtime_available: bool | None = None) -> KernelExecutionReadiness:
         """Read one Kernel snapshot for training hardware and isolation readiness.
 
         从同一个 Kernel 快照读取训练硬件和隔离就绪事实。
         """
 
+        if trainer_runtime_available is None:
+            trainer_runtime_available = self.trainer_runtime_available()
         facts = self.kernel.capabilities()
         # ── Phase 1: Validate the existing Kernel capability facts ──────
         # 第一阶段：校验现有 Kernel 能力事实。
@@ -176,6 +289,7 @@ class KernelTrainingExecutor:
             hardware_facts=hardware_facts,
             system_adapter_available="adapter.linux-system.cgroup-v2" in flags,
             hard_gpu_isolation_available="sandbox.device-bpf-capable" in flags and not has_shared_device_binding,
+            trainer_runtime_available=trainer_runtime_available,
         )
 
     def hardware_facts(self) -> HardwareFacts:
@@ -220,6 +334,9 @@ class KernelTrainingExecutor:
         return self._start(launch, facts)
 
     def _admit(self, launch: TrainingLaunchSpec) -> dict[str, Any]:
+        if not self.trainer_runtime_available(force=True):
+            raise ValueError("TRAINER_RUNTIME_UNAVAILABLE")
+        self._bind_trainer_interpreter(launch)
         launch.assert_executor_agnostic()
         if launch.distributed.world_size != 1 or launch.distributed.gpu_count != 1:
             raise ValueError("YIELD_PROFILE_UNSUPPORTED: V1 supports one NVIDIA GPU")
@@ -237,6 +354,29 @@ class KernelTrainingExecutor:
         ):
             raise ValueError("YIELD_HOST_UNSUPPORTED: shared WSL binding needs operator admission")
         return facts
+
+    def _bind_trainer_interpreter(self, launch: TrainingLaunchSpec) -> None:
+        """Bind the official LLaMA-Factory CLI to the manifest-owned interpreter.
+
+        将官方 LLaMA-Factory CLI 绑定到 manifest 指定的解释器。
+        """
+
+        if launch.engine.value != "llamafactory":
+            return
+        argv = list(launch.argv)
+        if argv and argv[0] == "llamafactory-cli":
+            command = argv[1:]
+        elif len(argv) >= 4 and argv[1:3] == ["-m", "llamafactory.cli"]:
+            command = argv[3:]
+        else:
+            raise ValueError("YIELD_TRAINER_LAUNCHER_INVALID: expected the official LLaMA-Factory CLI")
+        if not command or command[0] != "train":
+            raise ValueError("YIELD_TRAINER_LAUNCHER_INVALID: expected the official train command")
+
+        python = str(self.configuration.python)
+        launch.argv = [python, "-I", "-m", "llamafactory.cli", *command]
+        launch.env.pop("CYRENE_LLAMA_FACTORY_ENTRYPOINT", None)
+        launch.env["CYRENE_LLAMA_FACTORY_PYTHON"] = python
 
     def _start(self, launch: TrainingLaunchSpec, facts: dict[str, Any]) -> ProcessHandle:
         worker: dict[str, Any] = {"id": "yield-" + str(uuid4()), "generation": 1}

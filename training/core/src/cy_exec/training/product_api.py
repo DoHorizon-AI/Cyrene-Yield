@@ -239,6 +239,18 @@ def create_app(
         trace_id = getattr(request.state, "trace_id", None) or uuid4().hex
         span_id = getattr(request.state, "span_id", None)
         request_id = getattr(request.state, "request_id", None)
+        if code == "YIELD_EXECUTION_NOT_CONFIGURED":
+            detail = (
+                "Training execution is not configured. Run `cyrene service-prepare yield` to prepare the "
+                "trainer runtime and Kernel configuration."
+            )
+        elif code == "YIELD_TRAINER_RUNTIME_UNAVAILABLE":
+            detail = (
+                "The trainer runtime is unavailable. Run `cyrene service-prepare yield`, then retry after "
+                "the trainer is reported ready."
+            )
+        else:
+            detail = "The requested Product action did not complete. Check the selected resource or configured dependency."
 
         emit_diagnostic_error(
             "product.yield.error",
@@ -263,10 +275,7 @@ def create_app(
                 "title": code,
                 "status": status,
                 "code": code,
-                "detail": (
-                    "The requested Product action did not complete. "
-                    "Check the selected resource or configured dependency."
-                ),
+                "detail": detail,
                 "instance": request.url.path,
                 "retryable": status >= 500,
                 "traceId": trace_id,
@@ -295,18 +304,26 @@ def create_app(
         execution_detail = None
         if not execution_available:
             execution_block_reasons.append("TRAINING_NOT_CONFIGURED")
+            execution_detail = (
+                "Run `cyrene service-prepare yield` to prepare the trainer runtime and Kernel configuration."
+            )
         elif executor is None:
             execution_block_reasons.append("KERNEL_CAPABILITIES_UNAVAILABLE")
         else:
+            trainer_runtime_available = executor.trainer_runtime_available()
             try:
-                readiness = executor.execution_readiness()
+                readiness = executor.execution_readiness(trainer_runtime_available=trainer_runtime_available)
             except Exception:
                 execution_block_reasons.append("KERNEL_CAPABILITIES_UNAVAILABLE")
                 execution_detail = "Kernel capability facts are unavailable."
+                if not trainer_runtime_available:
+                    execution_block_reasons.append("TRAINER_RUNTIME_UNAVAILABLE")
             else:
                 execution_block_reasons.extend(
                     readiness.block_reasons(minimum_memory_bytes=executor.configuration.minimum_memory_bytes)
                 )
+                if not trainer_runtime_available:
+                    execution_detail = "Trainer runtime is unavailable; run `cyrene service-prepare yield`."
 
         api_ready = not background_errors
         execution_ready = not execution_block_reasons
@@ -522,15 +539,18 @@ def create_app(
         if draft.training_run is not None or draft.configuration is None:
             return service.start(draft_id, workspace_scope=scope)
         if executor is not None:
+            trainer_runtime_available = executor.trainer_runtime_available(force=True)
+            if not trainer_runtime_available:
+                raise ValueError(
+                    "YIELD_TRAINER_RUNTIME_UNAVAILABLE: Yield trainer manifest and locked runtime must be available"
+                )
             try:
-                readiness = executor.execution_readiness()
+                readiness = executor.execution_readiness(trainer_runtime_available=trainer_runtime_available)
             except Exception as exc:
                 raise ValueError(
                     "YIELD_KERNEL_CAPABILITIES_UNAVAILABLE: Kernel capability facts are unavailable"
                 ) from exc
-            blockers = readiness.block_reasons(
-                minimum_memory_bytes=executor.configuration.minimum_memory_bytes
-            )
+            blockers = readiness.block_reasons(minimum_memory_bytes=executor.configuration.minimum_memory_bytes)
             if blockers:
                 reason = blockers[0]
                 descriptions = {
@@ -539,7 +559,11 @@ def create_app(
                     "GPU_ISOLATION_UNAVAILABLE": (
                         "Kernel must report sandbox.device-bpf-capable for the required hard GPU isolation"
                     ),
+                    "TRAINER_RUNTIME_UNAVAILABLE": (
+                        "Yield trainer manifest and locked LLaMA-Factory runtime must be available"
+                    ),
                 }
+                reason = "TRAINER_RUNTIME_UNAVAILABLE" if "TRAINER_RUNTIME_UNAVAILABLE" in blockers else blockers[0]
                 raise ValueError(f"YIELD_{reason}: {descriptions[reason]}")
             # These are live host prerequisites only. A passing snapshot does
             # not admit the selected lease binding; Kernel's binding-aware
@@ -700,7 +724,9 @@ def create_app(
 
 
 def _unavailable() -> Any:
-    raise ValueError("YIELD_EXECUTION_NOT_CONFIGURED: connect a Kernel training host before starting")
+    raise ValueError(
+        "YIELD_EXECUTION_NOT_CONFIGURED: run `cyrene service-prepare yield` and configure a Kernel training host"
+    )
 
 
 def _yaml_response(document: str, filename: str) -> Response:
