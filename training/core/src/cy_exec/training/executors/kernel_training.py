@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -45,6 +46,38 @@ class KernelTrainingConfiguration(BaseModel):
     signing_key_file: Path
     minimum_memory_bytes: int = Field(default=1024**3, gt=0)
     allow_wsl_shared_device: bool = False
+
+
+@dataclass(frozen=True)
+class KernelExecutionReadiness:
+    """Typed projection of host capabilities needed before training submission.
+
+    提交训练前所需 Kernel 主机能力的类型化投影；不证明具体设备绑定可执行。
+    """
+
+    hardware_facts: HardwareFacts
+    system_adapter_available: bool
+    hard_gpu_isolation_available: bool
+
+    def block_reasons(self, *, minimum_memory_bytes: int) -> list[str]:
+        """Return stable reasons this Kernel host cannot execute the v1 GPU profile.
+
+        返回此 Kernel 主机无法执行 v1 GPU 配置的稳定原因。
+        """
+
+        reasons = []
+        if not self.system_adapter_available:
+            reasons.append("SYSTEM_ADAPTER_UNAVAILABLE")
+        if not any(
+            accelerator.kind == "gpu"
+            and accelerator.vendor == "nvidia"
+            and accelerator.allocatable_memory_bytes >= minimum_memory_bytes
+            for accelerator in self.hardware_facts.accelerators
+        ):
+            reasons.append("GPU_UNAVAILABLE")
+        if not self.hard_gpu_isolation_available:
+            reasons.append("GPU_ISOLATION_UNAVAILABLE")
+        return reasons
 
 
 def _document(value: Any) -> bytes:
@@ -81,12 +114,21 @@ class KernelTrainingExecutor:
             os.fsync(stream.fileno())
         os.replace(pending, path)
 
-    def hardware_facts(self) -> HardwareFacts:
-        """Project the Kernel's NVIDIA CUDA inventory into the existing preflight contract.
+    def execution_readiness(self) -> KernelExecutionReadiness:
+        """Read one Kernel snapshot for training hardware and isolation readiness.
 
-        将 Kernel 的 NVIDIA CUDA 清单映射到现有 preflight 契约。
+        从同一个 Kernel 快照读取训练硬件和隔离就绪事实。
         """
+
         facts = self.kernel.capabilities()
+        # ── Phase 1: Validate the existing Kernel capability facts ──────
+        # 第一阶段：校验现有 Kernel 能力事实。
+        feature_flags = facts.get("featureFlags", [])
+        if not isinstance(feature_flags, list) or any(not isinstance(item, str) for item in feature_flags):
+            raise ValueError("YIELD_KERNEL_CAPABILITIES_INVALID: feature flags must be strings")
+
+        # ── Phase 2: Project inventory into the typed preflight contract ─
+        # 第二阶段：将 inventory 投影到类型化 preflight 契约。
         accelerators = []
         for resource in facts.get("resources", []):
             capabilities = {item["id"] for item in resource.get("capabilities", [])}
@@ -112,13 +154,37 @@ class KernelTrainingExecutor:
                     features=("fp32",),
                 )
             )
-        return HardwareFacts.from_node_resource_inventory(
+        hardware_facts = HardwareFacts.from_node_resource_inventory(
             node_id=facts["node"]["nodeId"],
             inventory_generation=int(facts["inventoryGeneration"]),
             accelerators=accelerators,
             accelerator_runtime="cuda",
             architecture=platform.machine().lower(),
         )
+        flags = set(feature_flags)
+        has_shared_device_binding = any(
+            resource.get("attributes", {}).get("device.binding") == "wsl-shared-soft"
+            for resource in facts.get("resources", [])
+        )
+        # This positive flag is only a host-level prerequisite. It does not
+        # prove that a particular lease binding can be admitted; Kernel still
+        # performs binding-aware admission and attaches isolation to the target
+        # cgroup when it starts the worker.
+        # 此正向标志只是主机级前提，不证明具体租约绑定可获准；Kernel 仍会在启动
+        # worker 时执行绑定感知准入，并在目标 cgroup 上实际挂载隔离。
+        return KernelExecutionReadiness(
+            hardware_facts=hardware_facts,
+            system_adapter_available="adapter.linux-system.cgroup-v2" in flags,
+            hard_gpu_isolation_available="sandbox.device-bpf-capable" in flags and not has_shared_device_binding,
+        )
+
+    def hardware_facts(self) -> HardwareFacts:
+        """Project the Kernel's NVIDIA CUDA inventory into the preflight contract.
+
+        将 Kernel 的 NVIDIA CUDA 清单映射到 preflight 契约。
+        """
+
+        return self.execution_readiness().hardware_facts
 
     def recover(self) -> list[tuple[TrainingLaunchSpec, ProcessHandle]]:
         """Restore existing receipt handles without acquiring another lease.

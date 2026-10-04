@@ -291,25 +291,31 @@ def create_app(
     @app.get("/healthz")
     @app.get("/")
     def health() -> dict[str, Any]:
-        execution_ready = False
+        execution_block_reasons: list[str] = []
         execution_detail = None
-        if kernel is not None:
+        if not execution_available:
+            execution_block_reasons.append("TRAINING_NOT_CONFIGURED")
+        elif executor is None:
+            execution_block_reasons.append("KERNEL_CAPABILITIES_UNAVAILABLE")
+        else:
             try:
-                kernel.capabilities()
-                execution_ready = True
-            except Exception as exc:
-                execution_ready = False
-                execution_detail = str(exc)
-        elif control is not None:
-            execution_ready = True
+                readiness = executor.execution_readiness()
+            except Exception:
+                execution_block_reasons.append("KERNEL_CAPABILITIES_UNAVAILABLE")
+                execution_detail = "Kernel capability facts are unavailable."
+            else:
+                execution_block_reasons.extend(
+                    readiness.block_reasons(minimum_memory_bytes=executor.configuration.minimum_memory_bytes)
+                )
 
-        api_ready = len(background_errors) == 0
-        overall_ready = api_ready and (execution_ready if execution_available else True)
+        api_ready = not background_errors
+        execution_ready = not execution_block_reasons
 
         response: dict[str, Any] = {
-            "status": "READY" if overall_ready else "DEGRADED",
+            "status": "READY" if api_ready else "DEGRADED",
             "apiReady": api_ready,
             "executionReady": execution_ready,
+            "executionBlockReasons": execution_block_reasons,
             "trainingConfigured": execution_available,
             "modelRegistryConfigured": registry is not None,
             "reconcileErrors": list(background_errors),
@@ -505,11 +511,44 @@ def create_app(
         if scope is not None:
             # Resolve scope before checking execution configuration so a private
             # caller cannot probe another Workspace's draft through this action.
-            service.get_draft_for_workspace(draft_id, scope)
+            draft = service.get_draft_for_workspace(draft_id, scope)
         if not execution_available:
             return _unavailable()
+        if scope is None:
+            draft = service.get_draft(draft_id)
+        # Preserve start idempotency and the draft-not-prepared error. Readiness
+        # applies only to a new ProductRun acceptance; retries return its existing
+        # run without making current Kernel availability part of run lookup.
+        if draft.training_run is not None or draft.configuration is None:
+            return service.start(draft_id, workspace_scope=scope)
         if executor is not None:
-            runtime.update_hardware_facts(executor.hardware_facts())
+            try:
+                readiness = executor.execution_readiness()
+            except Exception as exc:
+                raise ValueError(
+                    "YIELD_KERNEL_CAPABILITIES_UNAVAILABLE: Kernel capability facts are unavailable"
+                ) from exc
+            blockers = readiness.block_reasons(
+                minimum_memory_bytes=executor.configuration.minimum_memory_bytes
+            )
+            if blockers:
+                reason = blockers[0]
+                descriptions = {
+                    "SYSTEM_ADAPTER_UNAVAILABLE": "Kernel must advertise adapter.linux-system.cgroup-v2",
+                    "GPU_UNAVAILABLE": "Kernel must report an NVIDIA GPU with sufficient allocatable memory",
+                    "GPU_ISOLATION_UNAVAILABLE": (
+                        "Kernel must report sandbox.device-bpf-capable for the required hard GPU isolation"
+                    ),
+                }
+                raise ValueError(f"YIELD_{reason}: {descriptions[reason]}")
+            # These are live host prerequisites only. A passing snapshot does
+            # not admit the selected lease binding; Kernel's binding-aware
+            # StartWorker preflight and target-cgroup attach remain authoritative.
+            # 这些只是实时主机前提。快照通过不代表所选租约绑定获准；Kernel 的绑定感知
+            # StartWorker 准入及目标 cgroup 挂载仍是最终权威。
+            # Share the checked live snapshot with runtime preflight; do not issue
+            # a second capability read that could observe a different inventory.
+            runtime.update_hardware_facts(readiness.hardware_facts)
         return service.start(draft_id, workspace_scope=scope)
 
     @app.get("/api/v1/training-runs/{run_id}", response_model=TrainingRunResource, response_model_exclude_none=True)
