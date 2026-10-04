@@ -83,7 +83,7 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
       CATALOG_HELPER_SOURCE_COMMIT: 098ce4affb2fac38754eb18bd40ed679377d4c25
       CATALOG_RELEASE_ID: ${{ inputs.catalog_release_id || (github.ref == 'refs/heads/develop' && vars.CYRENE_PREVIEW_COMPONENT_CATALOG_RELEASE_ID) || (github.ref != 'refs/heads/develop' && vars.CYRENE_STABLE_COMPONENT_CATALOG_RELEASE_ID) || '' }}
-      WORKSPACE_BUILDER_COMMIT: 098ce4affb2fac38754eb18bd40ed679377d4c25
+      WORKSPACE_BUILDER_COMMIT: 2e2874768924922549b634601aa05ff6de48169a
     steps:
       - name: Check out exact Product source
         uses: actions/checkout@v5
@@ -186,19 +186,6 @@ jobs:
           PY
           )"
           echo "release_id=$catalog_release_id" >> "$GITHUB_OUTPUT"
-
-      - name: Prove immutable release is enabled and unused before native builds
-        env:
-          CYRENE_IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.CYRENE_IMMUTABLE_RELEASES_READ_TOKEN }}
-        run: |
-          set -euo pipefail
-          python platform-tools/tooling/release/preflight_component_release.py \
-            --repository "$SOURCE_REPOSITORY" \
-            --release-id "$RELEASE_ID" \
-            --channel "$CHANNEL" \
-            --source-ref "$SOURCE_REF" \
-            --source-commit "$SOURCE_COMMIT" \
-            --repository-root product-source
 
       - name: Set component output path
         run: echo "OUTPUT_ROOT=$RUNNER_TEMP/component-release" >> "$GITHUB_ENV"
@@ -334,7 +321,7 @@ jobs:
             --predicate-type https://slsa.dev/provenance/v1 \
             --format json >/dev/null
 
-      - name: Check out the exact Platform SDK producer and release tools
+      - name: Check out the exact Platform release preflight source
         uses: actions/checkout@v5
         with:
           repository: DoHorizon-AI/Cyrene-Platform
@@ -381,8 +368,10 @@ jobs:
       - name: Prove immutable release is enabled and unused
         env:
           CYRENE_IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.CYRENE_IMMUTABLE_RELEASES_READ_TOKEN }}
+          PLATFORM_SOURCE_COMMIT: ${{ steps.sdk-index.outputs.source_commit }}
         run: |
           set -euo pipefail
+          test "$(git -C platform-tools rev-parse HEAD^{commit})" = "$PLATFORM_SOURCE_COMMIT"
           python platform-tools/tooling/release/preflight_component_release.py \
             --repository "$SOURCE_REPOSITORY" \
             --release-id "$RELEASE_ID" \
@@ -718,7 +707,7 @@ jobs:
       PLATFORM_SOURCE_COMMIT: ${{ needs.native-build.outputs.platform_source_commit }}
       PLATFORM_SOURCE_REF: ${{ needs.native-build.outputs.platform_source_ref }}
       PLATFORM_INDEX_SHA256_EXPECTED: ${{ needs.native-build.outputs.platform_index_sha256 }}
-      WORKSPACE_BUILDER_COMMIT: 098ce4affb2fac38754eb18bd40ed679377d4c25
+      WORKSPACE_BUILDER_COMMIT: 2e2874768924922549b634601aa05ff6de48169a
       REQUESTED_CATALOG_RELEASE_ID: ${{ inputs.catalog_release_id || '' }}
     steps:
       - name: Check out exact Product source
