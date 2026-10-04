@@ -286,9 +286,9 @@ def create_app(
     def health() -> dict[str, Any]:
         execution_ready = False
         execution_detail = None
-        if kernel is not None:
+        if executor is not None:
             try:
-                kernel.capabilities()
+                executor.kernel.capabilities()
                 execution_ready = True
             except Exception as exc:
                 execution_ready = False
