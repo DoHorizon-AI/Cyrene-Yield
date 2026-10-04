@@ -1009,6 +1009,13 @@ jobs:
             --repository product-source \
             --owner yield > "$RUNNER_TEMP/product-contract-closure.json"
 
+      - name: Log in to GitHub Container Registry for published provenance verification
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Verify downloaded native manifests and payload attestations
         run: |
           set -euo pipefail
@@ -1100,13 +1107,6 @@ jobs:
             exit 2
           fi
           echo "id=$release_number" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GitHub Container Registry for published provenance verification
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
 
       - name: Verify published index, manifests, payloads, and real provenance
         env:
