@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "runtime_id": "yield-trainer",
+  "source_root": "execution-runtime",
+  "project_file": "trainer-runtime/pyproject.toml",
+  "lock_file": "trainer-runtime/uv.lock",
+  "bootstrap_script": "trainer-runtime/bootstrap.py",
+  "probe_script": "trainer-runtime/probe.py",
+  "protocol_files": [
+    "training/core/src/cy_exec/training/executors/kernel.desc",
+    "training/core/src/cy_exec/training/executors/kernel-descriptor.json",
+    "training/core/src/cy_exec/training/executors/training_worker.py"
+  ],
+  "profile": "CYRENE_YIELD_TRAINER_V1_CUDA128",
+  "platform_profile": "CYRENE_PLATFORM_RUNTIME_V1_LOCAL_GPU",
+  "python_executable": "/opt/cyrene/python/3.12.14/bin/python3.12",
+  "python_version": "3.12.14",
+  "uv_executable": "/opt/cyrene/uv/0.12.21/uv",
+  "uv_version": "0.12.21",
+  "runtime_home_relative_path": "yield/trainer-runtime",
+  "runtime_manifest_file": "runtime.json",
+  "runtime_arguments": [
+    "--runtime-config",
+    "{platform_runtime_config}",
+    "--trainer-runtime-config",
+    "{trainer_runtime_config}"
+  ],
+  "api_only_arguments": [
+    "--artifact-root",
+    "{artifact_root}"
+  ]
+}

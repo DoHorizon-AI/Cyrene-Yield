@@ -15,6 +15,7 @@ import importlib
 import importlib.metadata
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 

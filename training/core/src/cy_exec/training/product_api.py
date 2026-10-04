@@ -250,7 +250,9 @@ def create_app(
                 "the trainer is reported ready."
             )
         else:
-            detail = "The requested Product action did not complete. Check the selected resource or configured dependency."
+            detail = (
+                "The requested Product action did not complete. Check the selected resource or configured dependency."
+            )
 
         emit_diagnostic_error(
             "product.yield.error",
