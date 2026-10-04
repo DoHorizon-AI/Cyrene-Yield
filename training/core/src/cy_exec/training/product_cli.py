@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,8 +32,24 @@ def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
     读取一个私有 READY manifest,并强制执行其 profile 边界。
     """
 
-    if path.stat().st_mode & 0o077:
-        raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected mode 0600")
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError("RUNTIME_CONFIG_INVALID: expected a regular manifest file")
+    mode = stat.S_IMODE(metadata.st_mode)
+    if profile == PLATFORM_RUNTIME_PROFILE:
+        local_permissions = mode == 0o600 and metadata.st_uid == os.getuid()
+        production_permissions = False
+        if mode == 0o640 and metadata.st_uid == 0:
+            try:
+                import grp
+
+                production_permissions = metadata.st_gid == grp.getgrnam("cyrene").gr_gid
+            except (ImportError, KeyError):
+                production_permissions = False
+        if not (production_permissions or local_permissions):
+            raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected root:cyrene 0640 or owner-only 0600")
+    elif mode != 0o600 or metadata.st_uid != os.getuid():
+        raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected service-owned mode 0600")
     document = json.loads(path.read_text(encoding="utf-8"))
     if (
         not isinstance(document, dict)
@@ -78,8 +95,6 @@ def _runtime_from_manifests(
         or signing_key.stat().st_mode & 0o077
         or signing_key.stat().st_size != 32
         or not python.is_absolute()
-        or not python.is_file()
-        or not os.access(python, os.X_OK)
     ):
         raise ValueError("RUNTIME_CONFIG_UNAVAILABLE: bootstrap runtime components again")
     host = runtime.get("host")
@@ -94,6 +109,7 @@ def _runtime_from_manifests(
         installations=installations,
         signing_key_file=signing_key,
         python=python,
+        trainer_runtime_manifest=trainer_runtime_config,
         state_directory=state_directory,
         allow_wsl_shared_device=allow_wsl,
     )
