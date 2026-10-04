@@ -7,8 +7,8 @@
   "bootstrap_script": "trainer-runtime/bootstrap.py",
   "probe_script": "trainer-runtime/probe.py",
   "protocol_files": [
-    "training/core/src/cy_exec/training/executors/kernel.desc",
     "training/core/src/cy_exec/training/executors/kernel-descriptor.json",
+    "training/core/src/cy_exec/training/executors/kernel.desc",
     "training/core/src/cy_exec/training/executors/training_worker.py"
   ],
   "profile": "CYRENE_YIELD_TRAINER_V1_CUDA128",

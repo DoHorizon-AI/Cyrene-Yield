@@ -64,8 +64,9 @@ def test_execution_runtime_descriptor_has_frozen_paths_and_profiles() -> None:
         *descriptor["protocol_files"],
     ]
     assert all((repository / relative_path).is_file() for relative_path in product_files)
+    assert descriptor["protocol_files"] == sorted(set(descriptor["protocol_files"]))
     assert descriptor["protocol_files"] == [
-        "training/core/src/cy_exec/training/executors/kernel.desc",
         "training/core/src/cy_exec/training/executors/kernel-descriptor.json",
+        "training/core/src/cy_exec/training/executors/kernel.desc",
         "training/core/src/cy_exec/training/executors/training_worker.py",
     ]
