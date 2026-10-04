@@ -5,6 +5,7 @@ license = "Apache-2.0"
 requires-python = "==3.12.*"
 dependencies = [
     "grpcio==1.83.0",
+    "packaging==26.3",
     "protobuf==7.36.0",
     "torch==2.8.0",
     "torchaudio==2.8.0",
