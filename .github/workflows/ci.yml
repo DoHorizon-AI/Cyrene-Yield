@@ -20,9 +20,22 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+      # Canonical exact Platform SDK merge pin; keep paired with verification below.
+      - name: Check out the exact Package Runtime SDK
+        uses: actions/checkout@v5
+        with:
+          repository: DoHorizon-AI/Cyrene-Platform
+          ref: 35115e02fa4f07302af412ed9f3213a84488a665
+          path: .ci/cyrene-platform-sdk
+          fetch-depth: 1
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Verify the Platform SDK checkout is exact
+        run: |
+          test "$(git -C .ci/cyrene-platform-sdk rev-parse HEAD)" = "35115e02fa4f07302af412ed9f3213a84488a665"
+          test -f .ci/cyrene-platform-sdk/sdk/python/cyrene_runtime_maintenance/src/cyrene_runtime_maintenance/package_runtime.py
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip uv==0.12.3
@@ -33,6 +46,27 @@ jobs:
           uv run --no-sync ruff format --check scripts/check_silent_exceptions.py training/core/src/cy_exec/training/product_api.py training/core/tests/test_correlation_and_errors.py
           uv run --no-sync ruff format --check training/core/tests/conftest.py scripts/project_artifact_ref_schema.py scripts/generate_kernel_descriptor.py contracts/product/v1/tests/test_contract.py
           uv run --no-sync mypy
+      - name: Require the checked-out Package Runtime SDK
+        env:
+          PLATFORM_RUNTIME_SDK_SOURCE: ${{ github.workspace }}/.ci/cyrene-platform-sdk/sdk/python/cyrene_runtime_maintenance/src
+          PYTHONPATH: ${{ github.workspace }}/.ci/cyrene-platform-sdk/sdk/python/cyrene_runtime_maintenance/src
+        run: |
+          uv run --no-sync python - <<'PY'
+          import os
+          from pathlib import Path
+
+          import cyrene_runtime_maintenance as sdk
+
+          expected_source = Path(os.environ["PLATFORM_RUNTIME_SDK_SOURCE"]).resolve()
+          actual_package = Path(sdk.__file__).resolve()
+          if actual_package.parent != expected_source / "cyrene_runtime_maintenance":
+              raise SystemExit(f"unexpected Package Runtime SDK import: {actual_package}")
+          if not callable(getattr(sdk.PackageRuntimeClient, "from_environment", None)):
+              raise SystemExit("checked-out Package Runtime SDK is missing its source credential loader")
+          if not callable(getattr(sdk.PackageRuntimeClient, "reconcile_binding_operation_and_persist", None)):
+              raise SystemExit("checked-out Package Runtime SDK is missing owner reconciliation support")
+          print(f"Using Package Runtime SDK from {actual_package}")
+          PY
       - name: Enforce Plugin implementation ownership
         run: |
           test ! -d training/core/src/cy_exec/training/engines/native_transformers
@@ -42,6 +76,9 @@ jobs:
             exit 1
           fi
       - name: Run training core unit tests
+        env:
+          PLATFORM_RUNTIME_SDK_SOURCE: ${{ github.workspace }}/.ci/cyrene-platform-sdk/sdk/python/cyrene_runtime_maintenance/src
+          PYTHONPATH: ${{ github.workspace }}/.ci/cyrene-platform-sdk/sdk/python/cyrene_runtime_maintenance/src
         run: |
           uv run --no-sync pytest training/core/tests/
 

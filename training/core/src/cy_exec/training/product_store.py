@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
+import stat
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -20,6 +22,20 @@ from typing import Any, List
 from uuid import UUID
 
 from .logging import format_cyrene_log
+
+
+def ensure_private_store_directory(path: Path) -> None:
+    """Create or verify a service-owned directory for private Product state.
+
+    中文：创建或核验由当前服务用户独占的 Product 私有状态目录。
+    """
+
+    path = Path(path)
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.geteuid():
+        raise PermissionError("YIELD_PRODUCT_STORE_PERMISSIONS: state directory must be a service-owned directory")
+    os.chmod(path, 0o700)
 
 
 class ProductStore:
@@ -36,7 +52,20 @@ class ProductStore:
         *,
         log_retention_days: int = LOG_RETENTION_DAYS,
     ) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path = Path(path)
+        ensure_private_store_directory(path.parent)
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            descriptor = os.open(path, flags, 0o600)
+            os.close(descriptor)
+            metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.geteuid():
+            raise PermissionError("YIELD_PRODUCT_STORE_PERMISSIONS: database must be a service-owned regular file")
+        os.chmod(path, 0o600)
         self.path = path
         self.log_retention_days = log_retention_days
         self._connection = sqlite3.connect(path, check_same_thread=False)
@@ -74,7 +103,452 @@ class ProductStore:
                 "PRIMARY KEY(run_id, attempt_id, record_index));"
                 "CREATE INDEX IF NOT EXISTS ix_training_diagnostics_run_sequence"
                 " ON training_diagnostics(run_id, sequence);"
+                "CREATE TABLE IF NOT EXISTS package_binding_operations("
+                "request_id TEXT PRIMARY KEY, binding_id TEXT NOT NULL, package_id TEXT NOT NULL,"
+                "installation_id TEXT NOT NULL, operation TEXT NOT NULL CHECK(operation='activate'),"
+                "phase TEXT NOT NULL CHECK(phase IN ('INTENT','OUTCOME_PENDING_COMPLETE','PENDING_RECONCILE','UNKNOWN','COMPLETED')) ,"
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status_json TEXT, receipt_json TEXT, blocker TEXT);"
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_package_binding_one_pending_operation"
+                " ON package_binding_operations(binding_id) WHERE phase <> 'COMPLETED';"
+                "CREATE TABLE IF NOT EXISTS package_binding_owner_state("
+                "binding_id TEXT PRIMARY KEY, package_id TEXT NOT NULL, installation_id TEXT, request_id TEXT,"
+                "phase TEXT NOT NULL, runtime_state TEXT, runtime_generation INTEGER, failure_code TEXT,"
+                "connection_ref TEXT, blocker TEXT, updated_at TEXT NOT NULL);"
             )
+        self._secure_sqlite_files()
+
+    def _secure_sqlite_files(self) -> None:
+        """Keep the database and any SQLite sidecar files owner-only.
+
+        中文：将数据库与可能存在的 SQLite 辅助文件限制为服务用户可读写。
+        """
+
+        for candidate in (
+            self.path,
+            Path(str(self.path) + "-wal"),
+            Path(str(self.path) + "-shm"),
+            Path(str(self.path) + "-journal"),
+        ):
+            try:
+                metadata = candidate.lstat()
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.geteuid():
+                raise PermissionError(
+                    "YIELD_PRODUCT_STORE_PERMISSIONS: SQLite files must be service-owned regular files"
+                )
+            os.chmod(candidate, 0o600)
+
+    @staticmethod
+    def _binding_scope_matches(row: tuple[Any, ...], *, binding_id: str, package_id: str, installation_id: str) -> bool:
+        return row[0] == binding_id and row[1] == package_id and row[2] == installation_id and row[3] == "activate"
+
+    def begin_package_binding_operation(
+        self,
+        request_id: str,
+        binding_id: str,
+        package_id: str,
+        installation_id: str,
+    ) -> dict[str, Any] | None:
+        """Durably reserve one exact activation intent before any Package Runtime call.
+
+        中文：在调用 Package Runtime 前，先持久化唯一且精确的激活意图。
+        """
+
+        now = datetime.now(UTC).isoformat()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                existing = self._connection.execute(
+                    "SELECT binding_id, package_id, installation_id, operation, phase, blocker "
+                    "FROM package_binding_operations WHERE request_id=?",
+                    (request_id,),
+                ).fetchone()
+                if existing is not None:
+                    if not self._binding_scope_matches(
+                        existing, binding_id=binding_id, package_id=package_id, installation_id=installation_id
+                    ):
+                        raise ValueError("YIELD_PACKAGE_BINDING_IDEMPOTENCY_CONFLICT")
+                    self._connection.commit()
+                    return {
+                        "request_id": request_id,
+                        "binding_id": binding_id,
+                        "package_id": package_id,
+                        "installation_id": installation_id,
+                        "operation": existing[3],
+                        "phase": existing[4],
+                        "blocker": existing[5],
+                    }
+
+                state = self._connection.execute(
+                    "SELECT phase, installation_id FROM package_binding_owner_state WHERE binding_id=?",
+                    (binding_id,),
+                ).fetchone()
+                if state is not None and state[0] == "ACTIVE":
+                    if state[1] == installation_id:
+                        self._connection.commit()
+                        return {"phase": "ACTIVE", "installation_id": installation_id, "already_active": True}
+                    raise ValueError("YIELD_PACKAGE_BINDING_ACTIVE_CONFLICT")
+
+                pending = self._connection.execute(
+                    "SELECT request_id, phase FROM package_binding_operations "
+                    "WHERE binding_id=? AND phase <> 'COMPLETED' LIMIT 1",
+                    (binding_id,),
+                ).fetchone()
+                if pending is not None:
+                    raise ValueError("YIELD_PACKAGE_BINDING_OPERATION_PENDING")
+
+                self._connection.execute(
+                    "INSERT INTO package_binding_operations("
+                    "request_id,binding_id,package_id,installation_id,operation,phase,created_at,updated_at,blocker) "
+                    "VALUES(?,?,?,?,?,'INTENT',?,?,?)",
+                    (
+                        request_id,
+                        binding_id,
+                        package_id,
+                        installation_id,
+                        "activate",
+                        now,
+                        now,
+                        "PACKAGE_BINDING_ACTIVATION_PENDING",
+                    ),
+                )
+                self._write_package_binding_state(
+                    binding_id=binding_id,
+                    package_id=package_id,
+                    installation_id=installation_id,
+                    request_id=request_id,
+                    phase="INTENT",
+                    runtime_state=None,
+                    runtime_generation=None,
+                    failure_code=None,
+                    connection_ref=None,
+                    blocker="PACKAGE_BINDING_ACTIVATION_PENDING",
+                    updated_at=now,
+                )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+            self._secure_sqlite_files()
+        return None
+
+    def verify_package_binding_intent(self, request_id: str, scope: Any) -> None:
+        """Check the SDK callback still refers to the already committed intent.
+
+        中文：核验 SDK 回调使用的范围与先前持久化的 intent 完全一致。
+        """
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT binding_id, package_id, installation_id, operation, phase "
+                "FROM package_binding_operations WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        if (
+            row is None
+            or not self._binding_scope_matches(
+                row,
+                binding_id=scope.binding_id,
+                package_id=scope.package_id,
+                installation_id=scope.installation_id,
+            )
+            or row[4] != "INTENT"
+        ):
+            raise ValueError("YIELD_PACKAGE_BINDING_INTENT_CONFLICT")
+
+    def record_package_binding_outcome(
+        self,
+        request_id: str,
+        binding_id: str,
+        package_id: str,
+        installation_id: str,
+        status: dict[str, Any] | None,
+        receipt: dict[str, Any],
+        *,
+        phase: str,
+        blocker: str | None,
+    ) -> None:
+        """Atomically persist the observed runtime state and opaque broker receipt.
+
+        中文：在同一 SQLite 事务内持久化运行状态和不透明 Broker 回执。
+        """
+
+        if phase not in {"OUTCOME_PENDING_COMPLETE", "PENDING_RECONCILE"}:
+            raise ValueError("YIELD_PACKAGE_BINDING_PHASE_INVALID")
+        now = datetime.now(UTC).isoformat()
+        status_json = json.dumps(status, sort_keys=True, separators=(",", ":")) if status is not None else None
+        receipt_json = json.dumps(receipt, sort_keys=True, separators=(",", ":"))
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    "SELECT binding_id, package_id, installation_id, operation, phase, receipt_json "
+                    "FROM package_binding_operations WHERE request_id=?",
+                    (request_id,),
+                ).fetchone()
+                if (
+                    row is None
+                    or not self._binding_scope_matches(
+                        row, binding_id=binding_id, package_id=package_id, installation_id=installation_id
+                    )
+                    or row[4] not in {"INTENT", "OUTCOME_PENDING_COMPLETE", "PENDING_RECONCILE"}
+                    or (row[5] is not None and json.loads(row[5]) != receipt)
+                ):
+                    raise ValueError("YIELD_PACKAGE_BINDING_RECEIPT_CONFLICT")
+                self._connection.execute(
+                    "UPDATE package_binding_operations SET phase=?,updated_at=?,status_json=?,receipt_json=?,blocker=? "
+                    "WHERE request_id=?",
+                    (phase, now, status_json, receipt_json, blocker, request_id),
+                )
+                self._write_package_binding_state(
+                    binding_id=binding_id,
+                    package_id=package_id,
+                    installation_id=installation_id,
+                    request_id=request_id,
+                    phase=phase,
+                    runtime_state=status.get("state") if status else None,
+                    runtime_generation=status.get("generation") if status else None,
+                    failure_code=status.get("failure_code") if status else None,
+                    connection_ref=status.get("connection_ref") if status else None,
+                    blocker=blocker,
+                    updated_at=now,
+                )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+            self._secure_sqlite_files()
+
+    def mark_package_binding_unknown(self, request_id: str, blocker: str) -> None:
+        """Retain an intent without a receipt as non-replayable UNKNOWN state.
+
+        中文：将缺少 receipt 的 intent 标为不可重放的 UNKNOWN 状态。
+        """
+
+        now = datetime.now(UTC).isoformat()
+        state_values: tuple[Any, ...] | None = None
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    "SELECT binding_id, package_id, installation_id, operation, phase, receipt_json "
+                    "FROM package_binding_operations WHERE request_id=?",
+                    (request_id,),
+                ).fetchone()
+                if row is None:
+                    raise KeyError(request_id)
+                if row[5] is not None:
+                    self._connection.commit()
+                    return
+                if row[4] not in {"INTENT", "UNKNOWN"}:
+                    self._connection.commit()
+                    return
+                self._connection.execute(
+                    "UPDATE package_binding_operations SET phase='UNKNOWN',updated_at=?,blocker=? WHERE request_id=?",
+                    (now, blocker, request_id),
+                )
+                state_values = (row[0], row[1], row[2])
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+            self._secure_sqlite_files()
+            if state_values is not None:
+                self._connection.execute("BEGIN IMMEDIATE")
+                try:
+                    self._write_package_binding_state(
+                        binding_id=state_values[0],
+                        package_id=state_values[1],
+                        installation_id=state_values[2],
+                        request_id=request_id,
+                        phase="UNKNOWN",
+                        runtime_state=None,
+                        runtime_generation=None,
+                        failure_code=None,
+                        connection_ref=None,
+                        blocker=blocker,
+                        updated_at=now,
+                    )
+                    self._connection.commit()
+                except sqlite3.Error:
+                    self._connection.rollback()
+                    # The operation journal remains authoritative if its status projection
+                    # cannot be updated during a local storage failure.
+                    return
+                self._secure_sqlite_files()
+
+    def package_binding_operation_for_reconcile(self, request_id: str, binding_id: str) -> dict[str, Any] | None:
+        """Load one private operation row; its receipt must never reach HTTP output.
+
+        中文：读取内部恢复所需的操作行；其中 receipt 绝不能进入 HTTP 响应。
+        """
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT request_id,binding_id,package_id,installation_id,operation,phase,status_json,receipt_json,blocker "
+                "FROM package_binding_operations WHERE request_id=? AND binding_id=?",
+                (request_id, binding_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "request_id": row[0],
+            "binding_id": row[1],
+            "package_id": row[2],
+            "installation_id": row[3],
+            "operation": row[4],
+            "phase": row[5],
+            "status": json.loads(row[6]) if row[6] else None,
+            "receipt": json.loads(row[7]) if row[7] else None,
+            "blocker": row[8],
+        }
+
+    def mark_package_binding_completed(self, request_id: str) -> None:
+        """Mark a durably observed activation completed and erase its broker token.
+
+        中文：在 SDK Complete 成功后标记激活完成，并清除数据库中的 Broker token。
+        """
+
+        now = datetime.now(UTC).isoformat()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    "SELECT binding_id,package_id,installation_id,phase,receipt_json,status_json "
+                    "FROM package_binding_operations WHERE request_id=?",
+                    (request_id,),
+                ).fetchone()
+                if row is None or row[3] not in {"OUTCOME_PENDING_COMPLETE", "COMPLETED"}:
+                    raise ValueError("YIELD_PACKAGE_BINDING_OUTCOME_MISSING")
+                status = json.loads(row[5]) if row[5] else None
+                if not status or status.get("state") != "RUNNING" or not status.get("connection_ref"):
+                    raise ValueError("YIELD_PACKAGE_BINDING_OUTCOME_INVALID")
+                self._connection.execute(
+                    "UPDATE package_binding_operations SET phase='COMPLETED',updated_at=?,receipt_json=NULL,blocker=NULL "
+                    "WHERE request_id=?",
+                    (now, request_id),
+                )
+                self._write_package_binding_state(
+                    binding_id=row[0],
+                    package_id=row[1],
+                    installation_id=row[2],
+                    request_id=request_id,
+                    phase="ACTIVE",
+                    runtime_state=status.get("state"),
+                    runtime_generation=status.get("generation"),
+                    failure_code=status.get("failure_code"),
+                    connection_ref=status.get("connection_ref"),
+                    blocker=None,
+                    updated_at=now,
+                )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+            self._secure_sqlite_files()
+
+    def package_binding_status(self, binding_id: str) -> dict[str, Any]:
+        """Return only the public-safe status projection for one binding.
+
+        中文：仅返回绑定状态的安全投影，不返回连接引用或 Broker 回执。
+        """
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT package_id,installation_id,request_id,phase,runtime_state,runtime_generation,blocker,updated_at "
+                "FROM package_binding_owner_state WHERE binding_id=?",
+                (binding_id,),
+            ).fetchone()
+            operation = self._connection.execute(
+                "SELECT request_id,installation_id,phase,blocker FROM package_binding_operations "
+                "WHERE binding_id=? ORDER BY updated_at DESC,created_at DESC LIMIT 1",
+                (binding_id,),
+            ).fetchone()
+        if row is None:
+            if operation is not None:
+                return {
+                    "bindingId": binding_id,
+                    "packageId": "cyrene.training.llama-factory",
+                    "phase": "ACTIVE" if operation[2] == "COMPLETED" else operation[2],
+                    "requestId": operation[0],
+                    "installationId": operation[1],
+                    "runtimeState": None,
+                    "runtimeGeneration": None,
+                    "blocker": operation[3],
+                    "updatedAt": None,
+                }
+            return {
+                "bindingId": binding_id,
+                "packageId": "cyrene.training.llama-factory",
+                "phase": "UNBOUND",
+                "requestId": None,
+                "installationId": None,
+                "runtimeState": None,
+                "runtimeGeneration": None,
+                "blocker": "PACKAGE_BINDING_NOT_INITIALIZED",
+                "updatedAt": None,
+            }
+        phase = row[3]
+        request_id = row[2]
+        installation_id = row[1]
+        blocker = row[6]
+        if operation is not None:
+            request_id = operation[0]
+            installation_id = operation[1]
+            phase = "ACTIVE" if operation[2] == "COMPLETED" else operation[2]
+            if operation[2] != "COMPLETED":
+                blocker = operation[3]
+        return {
+            "bindingId": binding_id,
+            "packageId": row[0],
+            "installationId": installation_id,
+            "requestId": request_id,
+            "phase": phase,
+            "runtimeState": row[4],
+            "runtimeGeneration": row[5],
+            "blocker": blocker,
+            "updatedAt": row[7],
+        }
+
+    def _write_package_binding_state(
+        self,
+        *,
+        binding_id: str,
+        package_id: str,
+        installation_id: str | None,
+        request_id: str | None,
+        phase: str,
+        runtime_state: str | None,
+        runtime_generation: int | None,
+        failure_code: str | None,
+        connection_ref: str | None,
+        blocker: str | None,
+        updated_at: str,
+    ) -> None:
+        self._connection.execute(
+            "INSERT INTO package_binding_owner_state("
+            "binding_id,package_id,installation_id,request_id,phase,runtime_state,runtime_generation,"
+            "failure_code,connection_ref,blocker,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(binding_id) DO UPDATE SET package_id=excluded.package_id,"
+            "installation_id=excluded.installation_id,request_id=excluded.request_id,phase=excluded.phase,"
+            "runtime_state=excluded.runtime_state,runtime_generation=excluded.runtime_generation,"
+            "failure_code=excluded.failure_code,connection_ref=excluded.connection_ref,"
+            "blocker=excluded.blocker,updated_at=excluded.updated_at",
+            (
+                binding_id,
+                package_id,
+                installation_id,
+                request_id,
+                phase,
+                runtime_state,
+                runtime_generation,
+                failure_code,
+                connection_ref,
+                blocker,
+                updated_at,
+            ),
+        )
 
     def get(self, kind: str, resource_id: str) -> dict[str, Any]:
         with self._lock:
@@ -104,9 +578,7 @@ class ProductStore:
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
 
-    def list_for_workspace(
-        self, kind: str, organization_id: str, workspace_id: str
-    ) -> List[dict[str, Any]]:
+    def list_for_workspace(self, kind: str, organization_id: str, workspace_id: str) -> List[dict[str, Any]]:
         """List resources whose immutable scope exactly matches the caller."""
         with self._lock:
             rows = self._connection.execute(
@@ -123,8 +595,7 @@ class ProductStore:
         """Return trusted provenance, or None for legacy/unbound resources."""
         with self._lock:
             row = self._connection.execute(
-                "SELECT organization_id, workspace_id FROM workspace_resource_scopes "
-                "WHERE kind = ? AND id = ?",
+                "SELECT organization_id, workspace_id FROM workspace_resource_scopes WHERE kind = ? AND id = ?",
                 (kind, resource_id),
             ).fetchone()
         return (str(row[0]), str(row[1])) if row else None
@@ -265,9 +736,7 @@ class ProductStore:
             ).fetchone()
         return int(row[0])
 
-    def append_diagnostics(
-        self, run_id: str, attempt_id: str, documents: List[dict[str, Any]]
-    ) -> List[dict[str, Any]]:
+    def append_diagnostics(self, run_id: str, attempt_id: str, documents: List[dict[str, Any]]) -> List[dict[str, Any]]:
         """Append one attempt's new diagnostic records with a per-run sequence.
 
         Mirrors append_events so both streams page the same way and a controller
@@ -340,22 +809,17 @@ class ProductStore:
         purged = 0
         with self._lock, self._connection:
             for run_id in self._terminal_run_ids_before(cutoff):
-                cursor = self._connection.execute(
-                    "DELETE FROM training_diagnostics WHERE run_id=?", (run_id,)
-                )
+                cursor = self._connection.execute("DELETE FROM training_diagnostics WHERE run_id=?", (run_id,))
                 purged += int(cursor.rowcount or 0)
         return purged
 
-    def list_diagnostics(
-        self, run_id: str, after_sequence: int = 0, limit: int = 200
-    ) -> List[dict[str, Any]]:
+    def list_diagnostics(self, run_id: str, after_sequence: int = 0, limit: int = 200) -> List[dict[str, Any]]:
         """Read persisted diagnostics in sequence order. | 按序号读取已持久化诊断。"""
 
         bounded = max(1, min(int(limit), 500))
         with self._lock:
             rows = self._connection.execute(
-                "SELECT document FROM training_diagnostics WHERE run_id=? AND sequence>?"
-                " ORDER BY sequence ASC LIMIT ?",
+                "SELECT document FROM training_diagnostics WHERE run_id=? AND sequence>? ORDER BY sequence ASC LIMIT ?",
                 (run_id, int(after_sequence), bounded),
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
@@ -418,9 +882,7 @@ class ProductStore:
                 "SELECT ended_at FROM run_terminals WHERE run_id=?", (str(run_id),)
             ).fetchone()
             if row is not None and str(row[0]) <= ts:
-                self._connection.execute(
-                    "UPDATE run_terminals SET state=? WHERE run_id=?", (state, str(run_id))
-                )
+                self._connection.execute("UPDATE run_terminals SET state=? WHERE run_id=?", (state, str(run_id)))
                 return
             self._connection.execute(
                 "INSERT OR REPLACE INTO run_terminals(run_id, state, ended_at) VALUES(?,?,?)",
