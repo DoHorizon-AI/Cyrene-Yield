@@ -11,7 +11,9 @@ from __future__ import annotations
 import fcntl
 import asyncio
 import json
+import os
 import sqlite3
+import stat
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -22,9 +24,10 @@ from uuid import UUID, uuid4
 import grpc
 import httpx
 from cy_artifacts import ArtifactError, LocalArtifactProvider
-from fastapi import Body, Depends, FastAPI, Header, Query, Request
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from .control_plane import TrainingControlPlane
 from .executors.kernel_training import KernelTrainingConfiguration, KernelTrainingExecutor
@@ -59,7 +62,8 @@ from .model_registry import (
     ModelRegistryUnavailable,
 )
 from .product_service import YieldService
-from .product_store import ProductStore
+from .product_store import ProductStore, ensure_private_store_directory
+from .package_runtime_owner import PackageBindingOwner, PackageBindingOwnerFailure
 from .runtime import TrainingRuntime
 from .workspace_auth import WorkspaceScope, WorkspaceServiceAuthenticator
 from .workspace_projection import (
@@ -99,8 +103,16 @@ def create_app(
     独立构建 Product;实时训练需要显式配置 Kernel 绑定。
     """
     workspace_auth = WorkspaceServiceAuthenticator(workspace_credential_map_json)
-    state_directory.mkdir(parents=True, exist_ok=True)
-    owner = (state_directory / "product.lock").open("a")
+    ensure_private_store_directory(state_directory)
+    lock_path = state_directory / "product.lock"
+    try:
+        lock_metadata = lock_path.lstat()
+    except FileNotFoundError:
+        lock_metadata = None
+    if lock_metadata is not None and (not stat.S_ISREG(lock_metadata.st_mode) or lock_metadata.st_uid != os.geteuid()):
+        raise PermissionError("YIELD_PRODUCT_STORE_PERMISSIONS: lock file must be service-owned and regular")
+    owner = lock_path.open("a")
+    os.chmod(lock_path, 0o600)
     if kernel is not None:
         # Acquire ownership before constructing the lease renewal adapter.
         # 在构建租约续期适配器前先取得所有权。
@@ -132,6 +144,11 @@ def create_app(
         exchange_target_binding_id=exchange_target_binding_id,
         model_registry=registry,
         http_client=http_client,
+    )
+    package_binding_owner = PackageBindingOwner(
+        service.store,
+        binding_id=os.environ.get("CYRENE_LLAMA_FACTORY_PACKAGE_BINDING_ID"),
+        token_sha256=os.environ.get("YIELD_RUNTIME_OWNER_TOKEN_SHA256"),
     )
     stopped = threading.Event()
     background_errors: list[str] = []
@@ -196,6 +213,18 @@ def create_app(
 
     app = FastAPI(title="Cyrene Yield Product API", version="1.0.0", lifespan=lifespan)
     app.state.yield_service = service
+    app.state.package_binding_owner = package_binding_owner
+
+    def authorize_package_binding_owner(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> None:
+        try:
+            package_binding_owner.authorize(authorization)
+        except PackageBindingOwnerFailure as exc:
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from None
+
+    def package_binding_failure(exc: PackageBindingOwnerFailure) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"code": exc.code})
 
     @app.middleware("http")
     async def propagate_trace(request: Request, call_next: Any) -> Response:
@@ -342,6 +371,62 @@ def create_app(
         if execution_detail:
             response["executionDetail"] = execution_detail
         return response
+
+    @app.get("/api/v1/runtime-bindings/{binding_id}", include_in_schema=False)
+    @app.get("/api/v1/runtime-bindings/{binding_id}/status", include_in_schema=False)
+    def package_binding_status(
+        binding_id: str,
+        _authorized: None = Depends(authorize_package_binding_owner),
+    ) -> Any:
+        try:
+            return package_binding_owner.status(binding_id)
+        except PackageBindingOwnerFailure as exc:
+            return package_binding_failure(exc)
+
+    @app.post("/api/v1/runtime-bindings/{binding_id}/actions/activate", include_in_schema=False)
+    async def activate_package_binding(
+        binding_id: str,
+        request: Request,
+        _authorized: None = Depends(authorize_package_binding_owner),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
+    ) -> Any:
+        if idempotency_key is None:
+            return package_binding_failure(PackageBindingOwnerFailure(422, "YIELD_PACKAGE_BINDING_REQUEST_ID_REQUIRED"))
+        try:
+            body = await request.body()
+            if len(body) > 8192:
+                raise ValueError
+            command = json.loads(body, object_pairs_hook=_unique_json_object)
+            if (
+                not isinstance(command, dict)
+                or set(command) != {"installationId"}
+                or not isinstance(command.get("installationId"), str)
+            ):
+                raise ValueError
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return package_binding_failure(PackageBindingOwnerFailure(422, "YIELD_PACKAGE_BINDING_REQUEST_INVALID"))
+        try:
+            return await run_in_threadpool(
+                package_binding_owner.activate,
+                binding_id,
+                command["installationId"],
+                idempotency_key,
+            )
+        except PackageBindingOwnerFailure as exc:
+            return package_binding_failure(exc)
+
+    @app.post("/api/v1/runtime-bindings/{binding_id}/actions/reconcile", include_in_schema=False)
+    def reconcile_package_binding(
+        binding_id: str,
+        _authorized: None = Depends(authorize_package_binding_owner),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
+    ) -> Any:
+        if idempotency_key is None:
+            return package_binding_failure(PackageBindingOwnerFailure(422, "YIELD_PACKAGE_BINDING_REQUEST_ID_REQUIRED"))
+        try:
+            return package_binding_owner.reconcile(binding_id, idempotency_key)
+        except PackageBindingOwnerFailure as exc:
+            return package_binding_failure(exc)
 
     @app.post(
         "/api/v1/training-drafts", response_model=TrainingDraft, status_code=201, response_model_exclude_none=True
@@ -729,6 +814,20 @@ def _unavailable() -> Any:
     raise ValueError(
         "YIELD_EXECUTION_NOT_CONFIGURED: run `cyrene service-prepare yield` and configure a Kernel training host"
     )
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate request keys without echoing the request body.
+
+    中文：拒绝重复 JSON 字段，且不回显请求内容。
+    """
+
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON key")
+        value[key] = item
+    return value
 
 
 def _yaml_response(document: str, filename: str) -> Response:
