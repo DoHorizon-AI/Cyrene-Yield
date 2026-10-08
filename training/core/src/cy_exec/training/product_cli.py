@@ -15,6 +15,8 @@ import stat
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+from uuid import uuid4
 
 import httpx
 import uvicorn
@@ -152,6 +154,85 @@ def _run_command(arguments: list[str]) -> int:
     return 0
 
 
+def _package_binding_command(arguments: list[str]) -> int:
+    """Forward one local owner action; this CLI never loads Package Runtime credentials.
+
+    转发一个本机 owner 操作；此 CLI 不读取 Package Runtime source 凭据。
+    """
+
+    parser = argparse.ArgumentParser(prog="cyrene-yield package-binding")
+    commands = parser.add_subparsers(dest="binding_command", required=True)
+    status = commands.add_parser("status")
+    status.add_argument("binding_id")
+    activate = commands.add_parser("activate")
+    activate.add_argument("binding_id")
+    activate.add_argument("installation_id")
+    activate.add_argument("--request-id")
+    reconcile = commands.add_parser("reconcile")
+    reconcile.add_argument("binding_id")
+    reconcile.add_argument("--request-id", required=True)
+    for command in (status, activate, reconcile):
+        command.add_argument("--token-env", help="Name of the local owner token variable")
+        command.add_argument("--token-file", type=Path, help="Owner-only file containing the local owner token")
+    args = parser.parse_args(arguments)
+    if args.token_env and args.token_file:
+        parser.error("Choose only one of --token-env or --token-file")
+
+    token: str | None = None
+    if args.token_env:
+        token = os.environ.get(args.token_env)
+    elif args.token_file:
+        try:
+            metadata = args.token_file.lstat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+            ):
+                parser.error("Owner token file must be a caller-owned regular file with mode 0600")
+            token = args.token_file.read_text(encoding="utf-8")
+            if token.endswith("\n"):
+                token = token[:-1]
+        except (OSError, UnicodeDecodeError):
+            parser.error("Owner token file could not be read")
+    if not token or token != token.strip() or any(character.isspace() for character in token):
+        parser.error("Provide a non-empty owner token with --token-env or --token-file")
+
+    headers = {"Accept": "application/json", "Authorization": "Bearer " + token}
+    binding_path = quote(args.binding_id, safe="")
+    endpoint = f"/api/v1/runtime-bindings/{binding_path}"
+    request_id: str | None = None
+    if args.binding_command == "activate":
+        request_id = args.request_id or str(uuid4())
+        print(f"requestId: {request_id}")
+        headers["Idempotency-Key"] = request_id
+    elif args.binding_command == "reconcile":
+        request_id = args.request_id
+        headers["Idempotency-Key"] = request_id
+
+    try:
+        with httpx.Client(base_url="http://127.0.0.1:8001", headers=headers, timeout=15.0) as client:
+            if args.binding_command == "status":
+                response = client.get(endpoint + "/status")
+            elif args.binding_command == "reconcile":
+                response = client.post(endpoint + "/actions/reconcile")
+            else:
+                response = client.post(
+                    endpoint + "/actions/activate",
+                    json={"installationId": args.installation_id},
+                )
+    except httpx.HTTPError as exc:
+        print(f"Yield package binding: connection failed ({type(exc).__name__})", file=sys.stderr)
+        return 1
+    try:
+        result = response.json()
+    except ValueError:
+        print(f"Yield package binding: HTTP {response.status_code}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if response.status_code < 300 else 1
+
+
 def main() -> None:
     """Expose documented public APIs; operator paths never enter resource identities.
 
@@ -160,6 +241,8 @@ def main() -> None:
     arguments = sys.argv[1:]
     if arguments and arguments[0] == "run":
         raise SystemExit(_run_command(arguments[1:]))
+    if arguments and arguments[0] == "package-binding":
+        raise SystemExit(_package_binding_command(arguments[1:]))
     parser = argparse.ArgumentParser(description="Cyrene Yield Text Model Lifecycle V1")
     parser.add_argument("--state-directory", required=True, type=Path)
     parser.add_argument("--runtime-config", type=Path)
