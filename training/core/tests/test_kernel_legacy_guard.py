@@ -1,8 +1,14 @@
-"""Guardrail: Yield must not regain a local or duplicate Kernel executor."""
+"""Guardrail: Yield must not regain a local or duplicate Kernel executor.
+
+防回归约束:Yield 不得重新引入本地或重复的 Kernel executor。
+"""
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/tests/test_kernel_legacy_guard.py
+# │ 中文:文件:training/core/tests/test_kernel_legacy_guard.py
 # │ Module: training/core/tests/test_kernel_legacy_guard
+# │ 模块:training/core/tests/test_kernel_legacy_guard
 # │ Role: Yield core test module — verifies the unified training runtime and its contracts.
+# │ 职责:Yield 核心测试模块,验证统一训练 runtime 与契约。
 # │
 # │ 模块职责：Yield 核心测试模块——验证统一训练运行时及其契约。
 # └─────────────────────────────────────────────────────────────────────┘

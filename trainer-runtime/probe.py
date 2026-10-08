@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import importlib.metadata
 import json
 import os
@@ -18,15 +19,29 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from google.protobuf import descriptor_pb2
-from packaging.specifiers import SpecifierSet
-
 PROFILE = "CYRENE_YIELD_TRAINER_V1_CUDA128"
 REQUIREMENTS = {
     "grpcio": "==1.83.0",
+    "packaging": "==26.3",
     "protobuf": "==7.36.0",
     "torch": "==2.8.0",
+    "torchaudio": "==2.8.0",
+    "torchvision": "==0.23.0",
+    "transformers": "==5.6.0",
+    "peft": "==0.18.1",
+    "llamafactory": "==0.9.5",
 }
+IMPORT_MODULES = (
+    "grpc",
+    "google.protobuf",
+    "packaging",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "transformers",
+    "peft",
+    "llamafactory.cli",
+)
 
 
 def _sha256(path: Path) -> str:
@@ -34,6 +49,11 @@ def _sha256(path: Path) -> str:
 
 
 def _versions() -> dict[str, str]:
+    try:
+        from packaging.specifiers import SpecifierSet
+    except ImportError as exc:
+        raise ValueError("TRAINER_MODULE_UNAVAILABLE:packaging") from exc
+
     versions: dict[str, str] = {}
     for package, requirement in REQUIREMENTS.items():
         try:
@@ -46,14 +66,38 @@ def _versions() -> dict[str, str]:
     return versions
 
 
+def _trainer_modules() -> None:
+    """Import the modules required by the Kernel worker and the pinned trainer CLI.
+
+    导入 Kernel worker 与锁定 trainer CLI 实际需要的模块。
+    """
+
+    for module_name in IMPORT_MODULES:
+        try:
+            importlib.import_module(module_name)
+        except (ImportError, OSError) as exc:
+            raise ValueError(f"TRAINER_MODULE_UNAVAILABLE:{module_name}") from exc
+    try:
+        entrypoint = getattr(importlib.import_module("llamafactory.cli"), "main")
+    except (ImportError, AttributeError) as exc:
+        raise ValueError("TRAINER_ENTRYPOINT_UNAVAILABLE") from exc
+    if not callable(entrypoint):
+        raise ValueError("TRAINER_ENTRYPOINT_UNAVAILABLE")
+
+
 def _protocol(repository: Path) -> dict[str, Any]:
     descriptor = repository / "training/core/src/cy_exec/training/executors/kernel.desc"
     metadata = repository / "training/core/src/cy_exec/training/executors/kernel-descriptor.json"
     worker = repository / "training/core/src/cy_exec/training/executors/training_worker.py"
     if not descriptor.is_file() or not metadata.is_file() or not worker.is_file():
         raise ValueError("TRAINER_PROTOCOL_INPUT_MISSING")
-    descriptor_set = descriptor_pb2.FileDescriptorSet()
-    descriptor_set.ParseFromString(descriptor.read_bytes())
+    try:
+        from google.protobuf import descriptor_pb2
+
+        descriptor_set = descriptor_pb2.FileDescriptorSet()
+        descriptor_set.ParseFromString(descriptor.read_bytes())
+    except (ImportError, OSError, ValueError) as exc:
+        raise ValueError("TRAINER_MODULE_UNAVAILABLE:google.protobuf") from exc
     services = {f"{file.package}.{service.name}" for file in descriptor_set.file for service in file.service}
     required = {
         "cyrene.core.v1.KernelAuthorityService",
@@ -62,15 +106,10 @@ def _protocol(repository: Path) -> dict[str, Any]:
     }
     if not required.issubset(services):
         raise ValueError("TRAINER_PROTOCOL_INCOMPATIBLE")
-    compile_result = subprocess.run(
-        [os.sys.executable, "-m", "py_compile", str(worker)],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        timeout=20,
-    )
-    if compile_result.returncode:
-        raise ValueError("TRAINER_WORKER_INCOMPATIBLE")
+    try:
+        compile(worker.read_bytes(), str(worker), "exec")
+    except (OSError, SyntaxError, ValueError) as exc:
+        raise ValueError("TRAINER_WORKER_INCOMPATIBLE") from exc
     return {
         "descriptorDigest": _sha256(descriptor),
         "serviceCount": len(services),
@@ -78,9 +117,13 @@ def _protocol(repository: Path) -> dict[str, Any]:
 
 
 def probe(repository: Path, *, require_cuda: bool = True) -> dict[str, Any]:
-    """Validate the installed runtime without loading a model or allocating VRAM."""
+    """Validate the installed runtime without loading a model or allocating VRAM.
+
+    验证已安装的 runtime,不加载模型或分配 VRAM。
+    """
 
     versions = _versions()
+    _trainer_modules()
     import torch
 
     cuda_available = bool(torch.cuda.is_available())

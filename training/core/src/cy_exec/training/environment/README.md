@@ -7,3 +7,10 @@ Read them in that order.
 
 本目录负责 Yield 的环境意图、不可变锁和候选环境选择。依次阅读
 `contracts.py`、`resolver.py` 和 `__init__.py`。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# 训练环境策略
+
+本目录拥有 Yield 的环境意图、不可变锁和候选环境选择。contracts.py 定义数据模型；resolver.py 执行确定性选择；__init__.py 暴露内部 Product API。请按此顺序阅读。

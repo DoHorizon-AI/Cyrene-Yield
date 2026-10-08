@@ -2,11 +2,18 @@
 
 Configure.settings may only carry this ref plus worker-visible staging pointers.
 TrainingSpec remains the Product source of truth.
+
+不可变工作负载配置身份。它不是 TrainingSpec,也不是本地路径。
+
+Configure.settings 只可携带此引用以及 worker 可见的暂存指针。TrainingSpec 仍是 Product 的事实来源。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/workload.py
+# │ 中文:文件:training/core/src/cy_exec/training/contracts/workload.py
 # │ Module: training/core/src/cy_exec/training/contracts/workload
+# │ 模块:training/core/src/cy_exec/training/contracts/workload
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -86,7 +93,10 @@ class WorkloadConfigRef:
 
 @dataclass
 class StagedWorkload:
-    """Local staging result. control_plane_path must never be sent to a Worker."""
+    """Local staging result. control_plane_path must never be sent to a Worker.
+
+    本地暂存结果。control_plane_path 绝不能发送给 Worker。
+    """
 
     config_ref: WorkloadConfigRef
     control_plane_path: str
@@ -106,7 +116,10 @@ class StagedWorkload:
 
 @dataclass(frozen=True)
 class WorkloadConfigureSettings:
-    """Generic plugin Configure.settings. Not the TrainingSpec document."""
+    """Generic plugin Configure.settings. Not the TrainingSpec document.
+
+    通用 Plugin Configure.settings,不是 TrainingSpec 文档。
+    """
 
     workload_config_ref: WorkloadConfigRef
     worker_config_path: str

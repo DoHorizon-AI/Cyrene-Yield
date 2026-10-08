@@ -98,3 +98,53 @@ the release SHA. The unresolved records are listed in
 公开前，维护者必须让 Plugins 修订版及每个 owner 包可匿名访问，审查 CUDA/NVIDIA
 与上游衍生内容的许可证，刷新锁文件，并确认生成的 SBOM 与 release SHA 一致。
 未解决记录列于 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# 依赖与 SBOM 记录
+
+本页是 Yield 依赖与许可证清单的发布入口。它记录当前 manifest 与锁文件，不构成法律意见。
+
+## 权威输入
+
+- Product runtime 声明：pyproject.toml。
+- Product 已解析依赖图与摘要：uv.lock。
+- 独立 CUDA trainer 环境：trainer-runtime/pyproject.toml 与 trainer-runtime/uv.lock。
+- 公开契约 package：sdk/python/cyrene_yield_contracts/pyproject.toml。
+- 仓库许可证授权：LICENSE。
+- 直接依赖摘要：THIRD_PARTY_NOTICES.md。
+
+锁文件是精确解析版本与摘要的事实来源。Product 锁文件指向 Platform 的 c59be6f2bd82489fbe933dadff84fc589e00afd9 和 Plugins 的 3afbac4d386eb7a27f6778149187884820c0b7f6；Plugins 当前仍为 private，且多个所有者 package manifest 未声明许可证。因此，目前还无法进行匿名 clean-clone 构建。
+
+## 直接 package 清单
+
+| Package 类别 | 来源与锁文件 | 许可证状态 |
+|---|---|---|
+| Yield Product（cyrene-yield） | 根目录 pyproject.toml 与 uv.lock | package 元数据及根 LICENSE 声明 Apache-2.0 |
+| Yield contracts（cyrene-yield-contracts） | sdk/python/.../pyproject.toml | package 元数据声明 Apache-2.0 |
+| Platform SDK（cyrene-artifacts、cyrene-preflight） | Platform 锁定的 Git SHA | 所有者 package 元数据声明 Apache-2.0 |
+| 消费的 Plugins SDK / 能力 | Plugins 锁定的 Git SHA | 锁定的 runtime/analyzer/compatibility/validator package 许可证为 UNKNOWN；仍需所有者声明并确保匿名可访问 |
+| CUDA trainer runtime | trainer-runtime/uv.lock / PyTorch CUDA index | 需单独审查 PyTorch、NVIDIA CUDA 组件以及模型/上游许可证 |
+
+## SBOM 流程
+
+发布时，在不解析新版本的前提下分别导出每个锁定依赖图，并将输出交给组织批准的 SPDX 或 CycloneDX 生成器。生成的 JSON 应附加到 release，并在 release tag 旁记录其摘要。trainer-runtime 依赖图使用 CUDA 专用 PyTorch index，不属于 Product package 依赖闭包，因此必须单独列出。
+
+```bash
+uv export --project . --locked --format requirements-txt --no-dev > /tmp/cyrene-yield-runtime.txt
+uv export --project . --locked --format requirements-txt > /tmp/cyrene-yield-all.txt
+uv export --project trainer-runtime --locked --format requirements-txt > /tmp/cyrene-yield-trainer-runtime.txt
+```
+
+生成的 SBOM 必须包含 package URL、精确版本、源 URL/修订版、可用的摘要以及许可证表达式。本仓库当前不提交生成的 SBOM，因为批准的生成器和 release 制品存储属于外部控制。
+
+## 公开边界
+
+公开源码仓库与分发 Product package 或 CUDA trainer runtime 是不同的门禁。二进制分发必须具备 release SBOM、已解析依赖的许可证、上游声明，并对每个非 registry 来源作出明确决定。Hosted CI 是针对精确 release commit 的独立证据门禁；本地 CPU 测试不能替代它。
+
+plugins/llama-factory-training/data 下历史遗留的 LLaMA Factory 演示数据集已从此 clean-root 源码内容中排除。其旧历史仅保留在私有的 Cyrene-Yield-history-archive 中，未获准公开再分发。
+
+## 公开门禁
+
+公开前，维护者必须使 Plugins 修订版及每个所有者 package 均可匿名访问，审查 CUDA/NVIDIA 和上游衍生内容的许可证，刷新锁文件，并确认生成的 SBOM 与 release SHA 匹配。未解决记录列在 THIRD_PARTY_NOTICES.md。

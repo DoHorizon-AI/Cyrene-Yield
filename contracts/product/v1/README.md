@@ -1,7 +1,8 @@
-# Yield Product contract v1 — contract candidate only
+# Yield Product contract v1
 
-Status: `CONTRACT_CANDIDATE_READY`; no Product runtime, production adapter, or
-trainer acceptance is claimed by this branch.
+Status: `IMPLEMENTED_RC`; the Product API and local runtime adapter are covered
+by contract and unit evidence. Real CUDA, remote Artifact storage, and upstream
+trainer acceptance remain separate release gates.
 
 This directory freezes the external Training Product boundary. It deliberately
 does not modify or claim acceptance for the trainer, controller, runtime,
@@ -38,8 +39,7 @@ After durable commits, Yield may publish created/updated notifications for
 `dev.cyrene.yield.training-run.updated.v1`. The common Product event envelope
 contains only resource URI/version and change kind; consumers re-read Yield and
 tolerate duplicates, reordering, and newer versions. Engine output frames are
-measurements, not Product events. This contract-only slice does not claim a
-durable outbox publisher.
+measurements, not Product events. A durable outbox publisher is not claimed.
 
 ## State
 
@@ -67,6 +67,40 @@ Cyrene-defined replay key and conflicting body reuse returns a stable
 Deprecation, migration window, and removal follow the common profile. Changed
 state meaning or cancellation semantics requires v2.
 
+## Workspace private service routes
+
+`workspace-private.openapi.yaml` defines additive private routes for scoped
+draft create/import, get, prepare, and start. Product resolves each bearer to a
+fixed `organizationId` and `workspaceId` from the server-side
+`YIELD_WORKSPACE_CREDENTIAL_MAP` JSON setting. The setting contains only
+SHA-256 token digests, not bearer values. Operators must generate random
+service tokens with at least 32 bytes of entropy. Multiple distinct digests may
+map to one scope during rotation; duplicate digests and malformed maps are
+rejected. Comparisons scan the full configured map, which is limited to 1,024
+credentials and 256 KiB.
+
+```json
+{"version":1,"credentials":[{"tokenSha256":"<lowercase SHA-256 hex>","organizationId":"org-id","workspaceId":"workspace-id"}]}
+```
+
+Product assigns the trusted scope from this mapping and ignores any caller
+`workspaceId`. Draft, scope provenance, and idempotency receipt are written in
+one SQLite transaction. Completed result scope is also persisted with the
+result. Historical and legacy-created unscoped resources are not exposed by
+private routes. Legacy `/api/v1` reads expose only unscoped drafts, runs,
+events, diagnostics, attempts, results, exports, and handoffs; existing legacy
+writes remain unscoped. A private draft's associated run and result therefore
+cannot be read through those legacy paths.
+
+The bearer authenticates the Platform service only; it does not establish a
+user, Workspace member, or role. Missing map configuration returns `503`, an
+unknown bearer returns `401`, and malformed configuration prevents startup.
+The current Container Apps workflow updates images but does not configure this
+secret map or its environment SecretRef. Operators must configure both before
+enabling Platform calls. Starting a run retains its existing `202` response
+and does not claim an `Idempotency-Key` guarantee. Historical unscoped drafts
+must be recreated through a private route before Workspace access.
+
 ## Existing-code mapping and deviations
 
 - `TrainingEngineAdapter` is an existing Yield-local application port, described
@@ -83,3 +117,72 @@ state meaning or cancellation semantics requires v2.
 - Product runtime orchestration and trainer behavior are unchanged. A narrow
   process-liveness correction treats a Linux zombie PID as stopped, and CI now
   resolves the canonical Platform SDK through an explicit checkout path.
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# Yield Product 契约 v1
+
+状态：IMPLEMENTED_RC；Product API 和本地 runtime 适配器已有契约与单元证据。真实 CUDA、远程 Artifact 存储以及上游 trainer 验收仍是彼此独立的 release 门禁。
+
+此目录冻结外部 Training Product 边界。由于 trainer、controller、runtime、executor、capability resolver、LLaMA Factory fork 和既有适配器均有各自并行的所有者，此目录有意不修改这些部分，也不宣称它们已经验收。
+
+## Product 权威归属
+
+Yield 拥有 TrainingRun、TrainingAttempt、取消/重试策略、输出制品关系、ModelVersion 组合与 lineage 身份，以及它们的持久化状态。训练环境意图与确定性选择也属于 Yield 策略。
+
+- Attempt 变为 LOST 后，run 进入 AWAITING_RETRY 是 Product 策略。LOST 永远不能改写为 COMPLETED。
+- Kernel operation/worker/lease/fence 标识符属于内部执行证据，不会暴露在公开 TrainingAttempt schema 中。
+- 引擎适配器负责检查、验证、编译、解析事件并收集候选结果。它不能提交/取消 Product run，也不能决定重试状态。
+- Artifact 字节保留在 Artifact Plane。Yield 持久化带类型的 ArtifactRef 值和 derivedFromDigests lineage。
+- ModelVersion 由此 Product 契约中的 model-version.schema.json 定义。它组合 Platform 所有的 ArtifactRef，但不会将制品存储权转移给 Yield。
+- engineBindingId 用于选择 Product runtime 适配器或直接的 owner-scoped Plugin binding；它永远不是 Platform 业务路由。
+- 事件是由已提交状态派生的通知，不是真实数据来源。
+
+## 通知
+
+在持久化提交后，Yield 可以为 training-run 和 training-attempt 发布 created/updated 通知，类型示例为 dev.cyrene.yield.training-run.updated.v1。通用 Product 事件 envelope 仅包含资源 URI/版本和变更类型；消费者应重新读取 Yield，并容忍重复、乱序和更新版本。引擎输出 frame 是测量数据，不是 Product 事件。本文不宣称存在持久化 outbox publisher。
+
+## 状态
+
+TrainingRun：QUEUED -> RUNNING -> COMPLETED | FAILED | CANCELLING；CANCELLING -> CANCELLED | FAILED；以及 RUNNING -> AWAITING_RETRY -> RUNNING。
+
+TrainingAttempt：QUEUED -> RUNNING -> COMPLETED | FAILED | LOST | CANCELLING；随后 CANCELLING -> CANCELLED | FAILED。
+
+取消首先是意图。提供方的取消基元即使成功，也不一定证明实际委派的执行已停止；在 reconciliation 证据将 run 判定为终态前，run 保持 CANCELLING。
+
+## 兼容性
+
+API 根路径为 /api/v1，使用 Workspace 的 product-http-v1 兼容配置。OpenAPI 固定为 3.1.2，JSON Schema 固定为 Draft 2020-12，错误遵循 RFC 9457。创建与取消为异步操作：遵循 RFC 7240 的 Prefer: respond-async 时，返回 202、Preference-Applied: respond-async，以及指向 Product 所有 TrainingRun 的 Location。run 本身是轮询与失败资源；它不是 Kernel Operation。Idempotency-Key 是 Cyrene 定义的重放键；重复使用同一键但请求体冲突时，返回稳定的 YIELD_IDEMPOTENCY_CONFLICT。
+
+弃用、迁移窗口和移除遵循通用兼容配置。状态含义或取消语义改变时必须升至 v2。
+
+## Workspace 私有服务路由
+
+`workspace-private.openapi.yaml` 定义按范围隔离的私有草稿创建/导入、读取、准备和启动路由。Product 从服务端 `YIELD_WORKSPACE_CREDENTIAL_MAP` JSON 配置将每个 Bearer 映射到固定 `organizationId` 和 `workspaceId`。配置只保存 token 的 SHA-256 摘要，不保存 Bearer 明文。运维人员应生成至少 32 字节熵的随机服务 token。凭据轮换时允许多个不同摘要映射到同一范围；重复摘要和格式错误的 map 会被拒绝，比较过程会扫描完整映射；配置最多 1,024 个凭据且最大 256 KiB。
+
+```json
+{"version":1,"credentials":[{"tokenSha256":"<小写 SHA-256 十六进制摘要>","organizationId":"组织 ID","workspaceId":"Workspace ID"}]}
+```
+
+Product 从服务端映射赋予可信范围，并忽略调用方提供的 `workspaceId`。草稿、范围 provenance 和幂等回执在一个 SQLite 事务中写入；完成结果的范围也与结果一起持久化。历史资源和 legacy 创建的无范围资源不会通过私有路由暴露。旧 `/api/v1` 读取只暴露无范围的草稿、运行、事件、诊断、attempt、结果、导出和 handoff；现有 legacy 写入仍创建无范围数据。因此，私有草稿关联的运行与结果不能通过这些旧路由读取。
+
+Bearer 只认证 Platform 服务，不建立用户、Workspace 成员或角色身份。缺少映射配置返回 `503`，未知 Bearer 返回 `401`，格式错误的配置会阻止服务启动。当前 Container Apps workflow 只更新镜像，不配置此 secret map 或环境变量 SecretRef；启用 Platform 调用前，运维人员必须配置二者。启动操作保留原有 `202` 响应，不声称有 `Idempotency-Key` 保证。历史无范围草稿必须通过私有路由重新创建后才能供 Workspace 使用。
+
+## 既有代码映射与差异
+
+- TrainingEngineAdapter 是 Yield 本地已有的应用端口，说明见 training-execution-port.md；它不是新增的 capability 契约。
+- 外部 v1 规范使用 ArtifactRef 且省略 engine kind。当前内部 TrainingSpec 仍包含文件系统路径、output_dir 和 EngineKind；在实现可称为契约完整前，需要增加适配器投影。
+- 当前 cyrene.yield.training-runtime.v1 兼容接缝围绕 TrainingRuntime 暴露 submit/poll/cancel，并标记为 MIGRATING_COMPATIBILITY。生产 Plugin 适配器直接使用自身的 owner-scoped 契约；Platform 只提供通用资源、sandbox 和进程生命周期事实。
+- Product runtime 编排和 trainer 行为未改变。针对性修正将 Linux zombie PID 视为已停止；CI 现在通过显式 checkout 路径解析规范 Platform SDK。
+
+## Product operation catalog v2
+
+This Product publishes its Workspace operation catalog at
+[../v2/catalog.json](../v2/catalog.json). Each listed operation binds its exact
+owner operationId to the corresponding OpenAPI source and schema pointers.
+The release manifest pins the catalog and its complete OpenAPI reference closure
+to the same repository commit. This catalog declares operation contracts only;
+Workspace policy controls access independently.
+
+本 Product 在 [../v2/catalog.json](../v2/catalog.json) 发布 Workspace 操作目录。每个目录项都将准确的 owner operationId 绑定到对应的 OpenAPI 文档和 schema pointer。发布清单会将目录及其完整 OpenAPI 引用闭包固定到同一仓库提交。目录只声明操作契约；访问权限由独立的 Workspace policy 控制。

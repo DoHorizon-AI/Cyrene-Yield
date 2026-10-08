@@ -31,3 +31,32 @@ This module page is the entry point for the unified training runtime and the opt
 3. `plugin/README.md` —— 理解集成后端。
 4. `docs/architecture/tool-system.md` —— 查看适配器与执行器边界。
 5. `docs/API.md` —— 核对契约名称与状态。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# Yield 模块
+
+## 目录用途
+
+本模块文档是统一训练 runtime 和 Plugins 所有的可选 LLaMA Factory 后端入口。
+
+## 文件与职责
+
+| 路径 | 职责 |
+|---|---|
+| core/README.md | 训练契约、runtime、执行器、preflight 和 checkpoint |
+| plugin/README.md | Plugin 连接边界与提取后的 LLaMA Factory package |
+| ../../API.md | Product 对象与生命周期契约 |
+| ../../REPOSITORY-LIFECYCLE.md | 所有权、信任、release 与分支模型 |
+| ../../../service.json | Service 身份与扩展点 |
+| ../../../training/core/README.md | 现有 core package 边界与 Kernel 说明 |
+| Plugins LLaMA Factory README | Plugin 后端用法与 Product 工作流 |
+
+## 推荐阅读
+
+1. 阅读 docs/architecture/overview.md，了解所有权与生命周期。
+2. 阅读 core/README.md，跟踪规范 runtime。
+3. 阅读 plugin/README.md，了解集成后端。
+4. 阅读 docs/architecture/tool-system.md，检查适配器与执行器边界。
+5. 阅读 docs/API.md，核对契约名称和状态。
