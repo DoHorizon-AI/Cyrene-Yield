@@ -65,18 +65,16 @@ This repository does **not** distribute standalone release zip files directly to
 
 ## 6. Public-readiness gates / 公开准备门禁
 
-The pinned Platform revision is public, but the Plugins revision
-`3afbac4d386eb7a27f6778149187884820c0b7f6` is currently private and several
-owner package manifests do not declare a license. A public release therefore
-requires an anonymously reachable, license-reviewed dependency closure and a
-fresh lockfile. The current repository policy records this as
-`public_requires_private: true`.
+The pinned Platform and Plugins revisions are public. The Plugins revision is
+`cd361206e65092ae4afde472866fdbb6a4981b7f`, and the repository policy records
+`public_requires_private: false`. Several owner package manifests still do not
+declare a license, so binary publication requires a license-reviewed dependency
+closure, a fresh lockfile, and a release SBOM.
 
-Platform 锁定修订版已公开，但 Plugins 修订版
-`3afbac4d386eb7a27f6778149187884820c0b7f6` 当前仍为 private，且多个 owner 包
-manifest 未声明许可证。因此公开发布前必须取得可匿名访问且完成许可证审查的依赖
-闭包，并刷新锁文件。当前 repository policy 以
-`public_requires_private: true` 记录该事实。
+Platform 与 Plugins 锁定修订版均已公开。Plugins 修订版为
+`cd361206e65092ae4afde472866fdbb6a4981b7f`，repository policy 记录为
+`public_requires_private: false`。多个 owner 包 manifest 仍未声明许可证，因此二进制
+发布仍须取得完成许可证审查的依赖闭包、刷新锁文件并生成 release SBOM。
 
 Automatic GitHub checks cover the clean Product core and contract paths. The
 Azure pipeline is manual and its GPU branch is opt-in; `NOT_RUN` is not a pass.
@@ -215,7 +213,7 @@ ingress 与健康 revision 检查，并核对不可变镜像 digest。
 
 ## 6. 公开准备门禁
 
-锁定的 Platform 修订版已公开，但 Plugins 修订版 3afbac4d386eb7a27f6778149187884820c0b7f6 当前为 private，且多个所有者 package manifest 未声明许可证。因此公开发布必须具备可匿名访问、已完成许可证审查的依赖闭包，并生成新的锁文件。当前仓库策略将此状态记录为 public_requires_private: true。
+Platform 与 Plugins 锁定修订版均已公开。Plugins 修订版为 cd361206e65092ae4afde472866fdbb6a4981b7f，repository policy 记录为 public_requires_private: false。多个 owner package manifest 仍未声明许可证，因此二进制发布仍须取得完成许可证审查的依赖闭包、刷新锁文件并生成 release SBOM。
 
 GitHub 自动检查覆盖干净的 Product core 和契约路径。GitHub ACA workflow 只消费通过校验的 exact-SHA OCI 组件发布；补充 Azure pipeline 仍为手动执行，其 GPU 分支需显式启用，NOT_RUN 不代表通过。常规 release 仍需 exact-SHA hosted CI、依赖/SBOM 审查、从 main 创建 release tag，并对规范远程仓库进行 read-back。
 

@@ -39,7 +39,7 @@ GitHub 仓库及锁定的 Plugins 修订版均已可公开访问，匿名 clone 
 - **License**: [`LICENSE`](LICENSE)
 - **Security Policy**: [`SECURITY.md`](SECURITY.md)
 - **Contribution Guide**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- **LLaMA Factory Plugin Improvements**: [`plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/3afbac4d386eb7a27f6778149187884820c0b7f6/plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md)
+- **LLaMA Factory Plugin Improvements**: [`plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/cd361206e65092ae4afde472866fdbb6a4981b7f/plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md)
 - **Service Manifest**: [`service.json`](service.json)
 
 ## Repository layout
@@ -57,7 +57,7 @@ The following table describes the optional LLaMA Factory capability owned by
 Cyrene Plugins. It is context for the Product integration, not a Yield-owned
 implementation or a claim that the complete upstream tree has been migrated.
 The extracted source and upstream notices remain in the Plugin repository;
-review [`UPSTREAM_PROVENANCE.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/3afbac4d386eb7a27f6778149187884820c0b7f6/plugins/training/llama-factory/UPSTREAM_PROVENANCE.md)
+review [`UPSTREAM_PROVENANCE.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/cd361206e65092ae4afde472866fdbb6a4981b7f/plugins/training/llama-factory/UPSTREAM_PROVENANCE.md)
 before redistribution.
 
 下表描述由 Cyrene Plugins 所有的可选 LLaMA Factory capability，仅用于说明 Product
@@ -73,11 +73,13 @@ Cyrene Plugins 中的 LLaMA Factory capability 基于 [hiyouga/LLaMA-Factory](ht
 | 自动配置 | 推荐配置生成后仍允许用户修改，最终以用户确认值为准 | 以手动配置为主 |
 | 显存安全 | 启动前读取模型配置和训练配置，估算单设备峰值显存，并额外增加 10% 安全余量 | WebUI 不提供同等的训练前显存建议和强制启动告警流程 |
 | 风险确认 | 显存不足、低于建议值或无法确认时不建议训练；强制启动必须经过二次警告确认 | 无对应的引导式确认窗口 |
-| 加速默认值 | 默认使用 `liger_kernel`，依赖固定为 `liger-kernel>=0.8.0` | 可使用 `auto` 或由用户自行选择加速方式 |
-| 产品能力 | WebUI 和 CLI 仅保留训练、配置预览/保存、进度监控及适配器合并导出 | 同时提供评估、预测、聊天、WebChat 和 API 等入口 |
+| 模型与量化 | 仅从本地目录读取模型；量化由用户选择并纳入显存估算 | 可由框架下载模型，量化与显存建议分散配置 |
+| 训练能力 | 支持 LoRA、full、多模态与视觉投影参数；按比例划分验证集，并在保存 checkpoint 时评估 | 提供通用训练参数，但不包含同等的引导式分支和保存对齐验证策略 |
+| 加速与平台 | 按 CUDA、XPU、Linux/Windows ROCm 和 WSL 选择依赖；Windows Liger 复用兼容的 `triton-windows` | 通用安装流程不处理这些平台化一键展开规则 |
+| 产品能力 | 保留训练、配置预览/保存、进度监控、适配器合并，以及仅 Hugging Face 的快速推理测试 | 同时提供多种推理后端与更多非训练入口 |
 | 适配器交付 | 保留并重新设计适配器合并页面，按来源、输出格式和保存位置分步配置 | 通用导出页面 |
 | 多语言 | 支持英语、简体中文、俄语、韩语和日语；业务代码不直接写入中文，显示文本统一来自本地化资源 | 支持多语言，但不是针对新增引导流程设计 |
-| CLI | 默认路由仅保留 `train`、`export`、`webui`、`env`、`version`；V1 保留训练类型和 `merge` | 还包含 `api`、`chat`、`eval`、`webchat` 等非训练命令 |
+| CLI | 聚焦训练、导出、环境检查和 WebUI；快速推理仅使用 Hugging Face 后端 | 还包含 vLLM、SGLang 等多种推理路径 |
 
 ### Guided training workflow
 
@@ -133,7 +135,7 @@ be inspected separately:
 ```bash
 git clone https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git
 cd Cyrene-Plugins-Official
-git checkout 3afbac4d386eb7a27f6778149187884820c0b7f6
+git checkout cd361206e65092ae4afde472866fdbb6a4981b7f
 cd plugins/training/llama-factory
 pip install -e .
 llamafactory-cli webui
@@ -158,8 +160,8 @@ llamafactory-cli export path/to/export.yaml
 ## Upstream and integration references
 
 - Upstream baseline: `hiyouga/LLaMA-Factory`
-- Training-focused customization: `Icy-Lunar/LlamaFactory@f5a4a8f8`
-- Plugin integration path: [`plugins/training/llama-factory/`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/tree/3afbac4d386eb7a27f6778149187884820c0b7f6/plugins/training/llama-factory)
+- Training-focused customization: [`Icy-Lunar/LlamaFactory@194cc85c5d87612693ac9d47d13c2aecd8a81e22`](https://github.com/Icy-Lunar/LlamaFactory/commit/194cc85c5d87612693ac9d47d13c2aecd8a81e22)
+- Plugin integration path: [`plugins/training/llama-factory/`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/tree/cd361206e65092ae4afde472866fdbb6a4981b7f/plugins/training/llama-factory)
 
 Model weights, checkpoints, generated configurations, logs, and other runtime artifacts remain in operator-managed storage and must not be committed to this repository.
 ---
@@ -245,7 +247,7 @@ Plugins 仓库公开可访问时，可单独检查其不可变修订版：
 ```bash
 git clone https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git
 cd Cyrene-Plugins-Official
-git checkout 3afbac4d386eb7a27f6778149187884820c0b7f6
+git checkout cd361206e65092ae4afde472866fdbb6a4981b7f
 cd plugins/training/llama-factory
 pip install -e .
 llamafactory-cli webui
@@ -266,7 +268,7 @@ llamafactory-cli export path/to/export.yaml
 ## 上游与集成参考
 
 - 上游基线：hiyouga/LLaMA-Factory。
-- 面向训练的定制：Icy-Lunar/LlamaFactory@f5a4a8f8。
+- 面向训练的定制：Icy-Lunar/LlamaFactory@194cc85c5d87612693ac9d47d13c2aecd8a81e22。
 - Plugin 集成路径：Cyrene-Plugins-Official 中的 plugins/training/llama-factory/。
 
 模型权重、checkpoint、生成的配置、日志和其他运行时制品仍保存在运营方管理的存储中，不得提交到本仓库。
