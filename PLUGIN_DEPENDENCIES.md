@@ -19,19 +19,21 @@ not approved for public redistribution.
 
 Yield consumes the DirectPluginRuntime client SDK and its test-only preflight
 owner packages directly from the immutable Plugins revision
-`3afbac4d386eb7a27f6778149187884820c0b7f6`. No Plugin SDK or capability
+`cd361206e65092ae4afde472866fdbb6a4981b7f`. No Plugin SDK or capability
 implementation is vendored in this repository. Production receives opaque
 `connection_ref` values and never imports the implementation packages.
 
 The extraction scope and follow-up work are documented in the Plugin's
-`CYRENE_IMPROVEMENTS.md` and `README.md`. Because the pinned owner repository is
-currently private and the referenced package manifests do not declare a
-license, this dependency is a public-clone/release blocker until the owner
-publishes a reviewed immutable distribution.
+`CYRENE_IMPROVEMENTS.md` and `README.md`. The pinned owner repository and
+revision are publicly reachable, so they no longer block an anonymous clone.
+The referenced package manifests still do not declare a license, so binary
+publication remains blocked until the owner publishes a reviewed immutable
+distribution and the release SBOM records it.
 
 提取范围和后续工作记录在 Plugin 的 `CYRENE_IMPROVEMENTS.md` 与 `README.md` 中。
-由于锁定的 owner 仓库当前为 private，且相关包 manifest 没有声明许可证，该依赖
-在 owner 发布经过审查的不可变发行包前属于公开 clone/release 阻塞项。
+锁定的 owner 仓库及修订版现已可公开访问，不再阻塞匿名 clone。相关包 manifest
+仍未声明许可证，因此在 owner 发布经过审查的不可变发行包且 release SBOM 完成记录前，
+二进制发布仍被阻塞。
 
 clean-root 仓库有意不包含原 LLaMA Factory demo 数据集；这些数据仅保留在私有历史
 归档中，未获准公开再分发。
@@ -49,8 +51,8 @@ clean-root 仓库有意不包含原 LLaMA Factory demo 数据集；这些数据�
 
 原 LLaMA Factory 演示数据集位于 plugins/llama-factory-training/data，现有意从此 clean-root 仓库中移除。它们仅保留在私有历史归档中，未获准公开再分发。
 
-Yield 直接使用不可变 Plugins 修订版 3afbac4d386eb7a27f6778149187884820c0b7f6 中的 DirectPluginRuntime 客户端 SDK 及仅供测试使用的 preflight owner packages。本仓库未 vendoring 任何 Plugin SDK 或能力实现。生产环境接收不透明的 connection_ref 值，且绝不导入实现 package。
+Yield 直接使用不可变 Plugins 修订版 cd361206e65092ae4afde472866fdbb6a4981b7f 中的 DirectPluginRuntime 客户端 SDK 及仅供测试使用的 preflight owner packages。本仓库未 vendoring 任何 Plugin SDK 或能力实现。生产环境接收不透明的 connection_ref 值，且绝不导入实现 package。
 
-提取范围和后续工作记录在 Plugin 的 CYRENE_IMPROVEMENTS.md 与 README.md 中。由于锁定的 owner 仓库当前为 private，相关 package manifest 也未声明许可证，在 owner 发布经过审查的不可变分发版本前，此依赖会阻塞公开 clone/release。
+提取范围和后续工作记录在 Plugin 的 CYRENE_IMPROVEMENTS.md 与 README.md 中。锁定的 owner 仓库及修订版现已可公开访问，不再阻塞匿名 clone。相关 package manifest 仍未声明许可证，因此在 owner 发布经过审查的不可变发行包且 release SBOM 完成记录前，二进制发布仍被阻塞。
 
 clean-root 仓库有意不包含原 LLaMA Factory 演示数据集；这些数据仅留在私有历史归档中，未获准公开再分发。
