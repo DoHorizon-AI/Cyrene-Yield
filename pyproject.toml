@@ -19,7 +19,7 @@ dependencies = [
     "grpcio==1.83.0",
     "protobuf==7.36.0",
     "cryptography==50.0.1",
-    "cyrene-plugin-runtime @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@cd361206e65092ae4afde472866fdbb6a4981b7f#subdirectory=sdk/python/cyrene_plugin_runtime",
+    "cyrene-plugin-runtime @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@6cd728032fbb5b51b33f75131cb4daf1d414209d#subdirectory=sdk/python/cyrene_plugin_runtime",
 ]
 
 [project.scripts]
@@ -37,9 +37,9 @@ dev = [
     "types-PyYAML==6.0.12.20260906",
     "types-grpcio==1.83.0.20260730",
     "types-protobuf==7.35.1.20260906",
-    "cyrene-hf-model-analyzer @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@cd361206e65092ae4afde472866fdbb6a4981b7f#subdirectory=plugins/models/hf-model-analyzer",
-    "cyrene-compat-rules @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@cd361206e65092ae4afde472866fdbb6a4981b7f#subdirectory=plugins/policy/compat-rules",
-    "cyrene-dataset-validator @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@cd361206e65092ae4afde472866fdbb6a4981b7f#subdirectory=plugins/tools/dataset-validator",
+    "cyrene-hf-model-analyzer @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@6cd728032fbb5b51b33f75131cb4daf1d414209d#subdirectory=plugins/models/hf-model-analyzer",
+    "cyrene-compat-rules @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@6cd728032fbb5b51b33f75131cb4daf1d414209d#subdirectory=plugins/policy/compat-rules",
+    "cyrene-dataset-validator @ git+https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git@6cd728032fbb5b51b33f75131cb4daf1d414209d#subdirectory=plugins/tools/dataset-validator",
 ]
 
 [tool.setuptools.packages.find]
