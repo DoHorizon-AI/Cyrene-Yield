@@ -16,7 +16,7 @@ This module page is the entry point for the unified training runtime and the opt
 | [`../../REPOSITORY-LIFECYCLE.md`](../../REPOSITORY-LIFECYCLE.md) | Ownership, trust, release, and branch model / 归属、信任、发布与分支模型 |
 | [`../../../service.json`](../../../service.json) | Service identity and extension points / 服务身份与扩展点 |
 | [`../../../training/core/README.md`](../../../training/core/README.md) | Existing core package boundary and kernel notes / 现有核心包边界与内核说明 |
-| [Plugins LLaMA Factory README](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/6cd728032fbb5b51b33f75131cb4daf1d414209d/plugins/training/llama-factory/README.md) | Plugin backend usage and product workflow / 插件后端用法与产品工作流 |
+| [Plugins LLaMA Factory README](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/bf10bb5759fe5477438249e56ac5d864734f89cc/plugins/training/llama-factory/README.md) | Plugin backend usage and product workflow / 插件后端用法与产品工作流 |
 
 ## Suggested reading / 推荐阅读
 

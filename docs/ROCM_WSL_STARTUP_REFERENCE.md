@@ -4,8 +4,8 @@
 
 | Owner / 所有者 | Revision / 修订版 |
 | --- | --- |
-| External trainer / 外部训练器 | `Icy-Lunar/LlamaFactory@3b7a205f28dcd7e121844073827531c69057aa8b` |
-| Capability adapter / 能力适配器 | `Cyrene-Plugins-Official@6cd728032fbb5b51b33f75131cb4daf1d414209d`, `cyrene.training.llama-factory` version `0.2.2` |
+| External trainer / 外部训练器 | `Icy-Lunar/LlamaFactory@8c392ce83c6410a1679099e1799e02d7d150c3b7` |
+| Capability adapter / 能力适配器 | `Cyrene-Plugins-Official@bf10bb5759fe5477438249e56ac5d864734f89cc`, `cyrene.training.llama-factory` version `0.2.2` |
 | Product / 产品 | This dependent PR targets `Cyrene-Yield/develop`; no trainer implementation is copied here. / 本依赖 PR 面向 develop，不复制训练器实现。 |
 
 Dependencies under review: [trainer PR #1](https://github.com/Icy-Lunar/LlamaFactory/pull/1)
@@ -31,8 +31,8 @@ upstream gates are satisfied; reconcile the final integrated Plugins revision be
 
 ## Deployment and evidence / 部署与证据
 
-The [trainer preview ZIP](https://github.com/Icy-Lunar/LlamaFactory/releases/tag/preview-rocm-wsl-startup-20261105-3b7a205f)
-has SHA-256 `5461b50104605e9bf8bdf3788ed7882fc08d4c9a3e79e8f6cfec797fce53585e`.
+The [trainer preview ZIP](https://github.com/Icy-Lunar/LlamaFactory/releases/tag/preview-rocm-wsl-startup-20261105-8c392ce8)
+has SHA-256 `003160fd5397a16c63c715e62c85ceae0662ae9a10cac6c23a27399dd9b38983`.
 This reference update does not install that external trainer automatically. The
 operator deploys it separately; Platform still owns devices/process lifetime and
 Yield still owns training intent/run state. `trainer-runtime/uv.lock` is unchanged.
@@ -41,14 +41,17 @@ Yield still owns training intent/run state. `trainer-runtime/uv.lock` is unchang
 Platform 保持设备与进程生命周期所有权，Yield 保持训练意图和运行状态所有权，独立 CUDA
 环境的 `trainer-runtime/uv.lock` 不变。
 
-Trainer local tests: **230 passed, 1 skipped**. Both YAML/JSON tiny CPU runs loaded
+Trainer focused local tests: **245 passed, 1 skipped**. Both YAML/JSON tiny CPU runs loaded
 weights, trained LoRA, evaluated and saved a checkpoint. Plugin behavior/TCK/package
 producer tests: **19 passed**. Real ROCm/WSL, CUDA and XPU acceptance for this trainer
-revision: **NOT_RUN**. Hosted CI, review and merge are separate gates. The upstream
-whole-tree lint currently reports an existing undefined `EngineName` outside the
-startup patch; do not treat the preview as merge-ready or hardware-certified.
+revision: **NOT_RUN**. Hosted CI, review and merge are separate gates. The source
+follow-up fixes the stale `EngineName`/`infer_backend` check, license headers and
+pytest import path, and prepares local fixtures for legacy integration tests without
+weakening the production local-only loader. The complete matrix is rerunning;
+do not treat the preview as merge-ready or hardware-certified.
 
-训练器本地 230 通过、1 跳过，YAML/JSON 小模型 CPU 均完成权重加载、LoRA、训练、验证与保存。
+训练器本地专项 245 通过、1 跳过，YAML/JSON 小模型 CPU 均完成权重加载、LoRA、训练、验证与保存。
 Plugin 行为/TCK/发布生成器测试 19 通过。此训练器版本的 ROCm/WSL、CUDA、XPU 实机验收为
-**NOT_RUN**；Hosted CI、评审与合并分别确认。上游全仓 lint 暂报启动补丁以外的既有
-`EngineName` 未定义问题，因此不把预览视为可合并或已经通过硬件认证。
+**NOT_RUN**；Hosted CI、评审与合并分别确认。源码已修复失效的 `EngineName`/`infer_backend`
+检查、许可证头与 pytest 导入路径，并让遗留集成测试先准备本地文件，不放宽正式加载限制。
+完整矩阵重新运行中，不把预览视为可合并或已经通过硬件认证。

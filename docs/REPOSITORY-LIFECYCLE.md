@@ -66,13 +66,13 @@ This repository does **not** distribute standalone release zip files directly to
 ## 6. Public-readiness gates / 公开准备门禁
 
 The pinned Platform and Plugins revisions are public. The Plugins revision is
-`6cd728032fbb5b51b33f75131cb4daf1d414209d`, and the repository policy records
+`bf10bb5759fe5477438249e56ac5d864734f89cc`, and the repository policy records
 `public_requires_private: false`. Several owner package manifests still do not
 declare a license, so binary publication requires a license-reviewed dependency
 closure, a fresh lockfile, and a release SBOM.
 
 Platform 与 Plugins 锁定修订版均已公开。Plugins 修订版为
-`6cd728032fbb5b51b33f75131cb4daf1d414209d`，repository policy 记录为
+`bf10bb5759fe5477438249e56ac5d864734f89cc`，repository policy 记录为
 `public_requires_private: false`。多个 owner 包 manifest 仍未声明许可证，因此二进制
 发布仍须取得完成许可证审查的依赖闭包、刷新锁文件并生成 release SBOM。
 
@@ -213,7 +213,7 @@ ingress 与健康 revision 检查，并核对不可变镜像 digest。
 
 ## 6. 公开准备门禁
 
-Platform 与 Plugins 锁定修订版均已公开。Plugins 修订版为 6cd728032fbb5b51b33f75131cb4daf1d414209d，repository policy 记录为 public_requires_private: false。多个 owner package manifest 仍未声明许可证，因此二进制发布仍须取得完成许可证审查的依赖闭包、刷新锁文件并生成 release SBOM。
+Platform 与 Plugins 锁定修订版均已公开。Plugins 修订版为 bf10bb5759fe5477438249e56ac5d864734f89cc，repository policy 记录为 public_requires_private: false。多个 owner package manifest 仍未声明许可证，因此二进制发布仍须取得完成许可证审查的依赖闭包、刷新锁文件并生成 release SBOM。
 
 GitHub 自动检查覆盖干净的 Product core 和契约路径。GitHub ACA workflow 只消费通过校验的 exact-SHA OCI 组件发布；补充 Azure pipeline 仍为手动执行，其 GPU 分支需显式启用，NOT_RUN 不代表通过。常规 release 仍需 exact-SHA hosted CI、依赖/SBOM 审查、从 main 创建 release tag，并对规范远程仓库进行 read-back。
 
