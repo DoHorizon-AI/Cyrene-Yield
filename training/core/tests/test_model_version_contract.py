@@ -1,7 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: sdk/python/cyrene_artifacts/tests/test_model_version.py     ║
+# ║ 文件:sdk/python/cyrene_artifacts/tests/test_model_version.py     ║
 # ║ Module: Cyrene Yield                                             ║
+# ║ 模块:Cyrene Yield                                             ║
 # ║ Role: Immutable composed ModelVersion contract tests.                ║
+# ║ 职责:不可变组合 ModelVersion 契约测试。
 # ║                                                                     ║
 # ║ 模块：Cyrene Yield                                                ║
 # ║ 职责：不可变组合 ModelVersion 契约测试。                               ║

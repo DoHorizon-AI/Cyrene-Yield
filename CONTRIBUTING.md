@@ -52,7 +52,7 @@ Product 检查。除非精确运行时与 Hosted 验收产生证据，否则必�
 - Update [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and the SBOM entry for every dependency or upstream snapshot change.
 - New or substantially changed files under `docs/` must include English and Chinese text.
 - Never commit credentials, model weights, datasets, runtime homes, generated artifacts, or machine-specific absolute paths.
-- Open focused pull requests against `main` and distinguish local, hosted, real-GPU, merged, and unrun evidence. The clean-root `main` is the development base; the private history archive is not.
+- Open focused pull requests against `develop` and distinguish local, hosted, real-GPU, merged, and unrun evidence. The GitHub default branch `develop` is the development base; protected `main` receives release promotion from `develop`.
 
 - Product 状态与策略必须留在 Yield；不得新增第二套引擎或数据集权威。
 - 依赖变更必须同步 `uv.lock` 与 `trainer-runtime/uv.lock`。
@@ -60,5 +60,12 @@ Product 检查。除非精确运行时与 Hosted 验收产生证据，否则必�
   与 SBOM 入口。
 - `docs/` 下新增或大幅修改的文件必须同时包含英文和中文。
 - 不得提交凭证、模型权重、数据集、runtime home、生成制品或机器相关绝对路径。
-- 向 `main` 提交聚焦 PR，并区分本地、Hosted、真实 GPU、合并与未运行证据。clean-root
-  `main` 是开发基线；私有历史归档不是开发基线。
+- 向 `develop` 提交聚焦 PR，并区分本地、Hosted、真实 GPU、合并与未运行证据。GitHub 默认分支 `develop` 是开发基线；受保护的 `main` 接收来自 `develop` 的发布提升。
+
+## Task lifecycle / 任务生命周期
+
+All contributors and coding agents must follow [AGENTS.md](AGENTS.md) and the shared
+[Cyrene task lifecycle requirements](https://github.com/DoHorizon-AI/Cyrene-Workspace/blob/develop/docs/TASK_LIFECYCLE.md).
+
+所有贡献者和 AI 编码代理均须遵循 [AGENTS.md](AGENTS.md) 与共享的
+[Cyrene 任务生命周期要求](https://github.com/DoHorizon-AI/Cyrene-Workspace/blob/develop/docs/TASK_LIFECYCLE.md)。

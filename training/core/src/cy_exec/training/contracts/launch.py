@@ -3,11 +3,18 @@
 The Product passes this value to its explicit Platform execution port. The
 contract carries workload requirements, never a local process implementation
 or machine-level device assignment.
+
+由 Plugins 所有的训练适配器编译出的可移植 launch 意图。
+
+Product 将此值传递给显式的 Platform 执行端口。此契约携带工作负载需求,不包含本地进程实现或机器级设备分配。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/launch.py
+# │ 中文:文件:training/core/src/cy_exec/training/contracts/launch.py
 # │ Module: training/core/src/cy_exec/training/contracts/launch
+# │ 模块:training/core/src/cy_exec/training/contracts/launch
 # │ Role: Portable Yield launch intent for Platform-backed execution.
+# │ 职责:供 Platform 执行使用的可移植 Yield launch 意图。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -24,6 +31,7 @@ from .distributed import DistributedSpec
 from .status import EngineKind, LaunchKind
 
 # Machine-level device assignment is an Executor/Kernel concern.
+# 中文:机器级设备分配属于 Executor/Kernel 的职责。
 FORBIDDEN_LAUNCH_ENV = frozenset(
     {
         "CUDA_VISIBLE_DEVICES",
@@ -36,7 +44,10 @@ FORBIDDEN_LAUNCH_ENV = frozenset(
 
 @dataclass
 class ResourceRequest:
-    """What the compiled job needs. Not a device binding."""
+    """What the compiled job needs. Not a device binding.
+
+    编译后作业所需的内容,不是设备绑定。
+    """
 
     gpu_count: int = 1
     world_size: int = 1
@@ -69,7 +80,10 @@ class ResourceRequest:
 
 @dataclass
 class MountSpec:
-    """Logical input/output mount. Paths stay product-side until Executor binds them."""
+    """Logical input/output mount. Paths stay product-side until Executor binds them.
+
+    逻辑输入/输出挂载。Executor 绑定路径前,它们仍属于 Product 侧。
+    """
 
     source: str
     target: str
@@ -87,7 +101,10 @@ class MountSpec:
 
 @dataclass
 class OutputLayout:
-    """Standard attempt output contract. Not an Artifact Plane."""
+    """Standard attempt output contract. Not an Artifact Plane.
+
+    标准 attempt 输出契约,不是 Artifact Plane。
+    """
 
     root: str = "output"
     model: str = "model"
@@ -107,7 +124,10 @@ class OutputLayout:
 
 @dataclass
 class TrainingLaunchSpec:
-    """Final launch description produced by compile()."""
+    """Final launch description produced by compile().
+
+    由 compile() 生成的最终 launch 描述。
+    """
 
     engine: EngineKind
     argv: list[str]
@@ -172,7 +192,10 @@ class TrainingLaunchSpec:
         }
 
     def assert_executor_agnostic(self) -> None:
-        """Guardrail: launch specs stay free of machine authority."""
+        """Guardrail: launch specs stay free of machine authority.
+
+        保护约束:launch spec 不得携带机器权威信息。
+        """
 
         leaked = FORBIDDEN_LAUNCH_ENV.intersection(self.env)
         if leaked:
@@ -180,7 +203,10 @@ class TrainingLaunchSpec:
 
 
 def default_training_mounts(dataset_path: str, output_dir: str) -> list[MountSpec]:
-    """Logical input/output mounts. Executor binds them onto the node."""
+    """Logical input/output mounts. Executor binds them onto the node.
+
+    逻辑输入/输出挂载。Executor 会将它们绑定到节点。
+    """
 
     return [
         MountSpec(source=dataset_path, target="/input/dataset", kind="bind", read_only=True),
@@ -192,7 +218,10 @@ def merge_executor_env(
     launch_env: Mapping[str, str],
     assigned_env: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Executor-side merge. Device assignment may be added here, not in the contract."""
+    """Executor-side merge. Device assignment may be added here, not in the contract.
+
+    Executor 侧的合并步骤。设备分配可以在这里加入,不属于该契约。
+    """
 
     merged = dict(launch_env)
     if assigned_env:

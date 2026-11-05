@@ -5,11 +5,20 @@ decides whether to retry. It must not be rewritten as TrainingRun success.
 
 One Attempt may have many Kernel Operations (start, configure/invoke, stop).
 start_operation_id is the StartWorker operation, not a long-term singleton.
+
+一个 TrainingRun 包含多个 TrainingAttempt。
+
+Kernel Worker/Operation 丢失时,首先映射为 Attempt LOST。是否重试由 controller 决定,不得将其改写成 TrainingRun 成功。
+
+一个 Attempt 可对应多个 Kernel Operation(start、configure/invoke、stop)。start_operation_id 是 StartWorker 操作的 ID,不是长期单例。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/contracts/attempt.py
+# │ 中文:文件:training/core/src/cy_exec/training/contracts/attempt.py
 # │ Module: training/core/src/cy_exec/training/contracts/attempt
+# │ 模块:training/core/src/cy_exec/training/contracts/attempt
 # │ Role: Canonical Yield training runtime — owns training contracts, attempts, executors, engines, checkpoints, and preflight.
+# │ 职责:规范 Yield 训练 runtime,拥有训练契约、attempt、执行器、引擎、checkpoint 与 preflight。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -47,6 +56,10 @@ class KernelBinding:
     """Product-side handles for one TrainingAttempt.
 
     These are Kernel identities, not a second lease/fence machine.
+
+    一个 TrainingAttempt 的 Product 侧句柄。
+
+    这些是 Kernel 身份,不是第二套 lease/fence 状态机。
     """
 
     node_id: str = ""
@@ -63,7 +76,10 @@ class KernelBinding:
 
     @property
     def operation_id(self) -> str:
-        """Compatibility alias for StartWorker operation. Not a Product invariant."""
+        """Compatibility alias for StartWorker operation. Not a Product invariant.
+
+        StartWorker operation 的兼容别名,不是 Product 不变量。
+        """
         return self.start_operation_id
 
     @property

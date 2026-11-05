@@ -1,4 +1,7 @@
-"""Canonical Platform and trainer runtime manifest consumption tests."""
+"""Canonical Platform and trainer runtime manifest consumption tests.
+
+读取规范 Platform 与 trainer runtime manifest 的测试。
+"""
 
 from __future__ import annotations
 

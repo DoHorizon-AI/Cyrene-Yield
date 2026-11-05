@@ -27,3 +27,32 @@ Start with `training/core/src/cy_exec/training/contracts/__init__.py` and then f
 Read sibling modules in runtime order; use the parent README for ownership boundaries.
 从 `training/core/src/cy_exec/training/contracts/__init__.py` 开始，再按包入口或导入关系继续阅读。
 按运行时顺序阅读同级模块；职责边界请查阅父目录 README。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# training/core/src/cy_exec/training/contracts
+
+训练意图、attempt、工作负载、事件与制品的稳定 Product 契约。
+
+## 文件
+
+| 条目 | 职责 |
+|---|---|
+| training/core/src/cy_exec/training/contracts/__init__.py | 包初始化与公开导入边界。 |
+| training/core/src/cy_exec/training/contracts/adapter.py | Python 实现或测试模块：adapter.py。 |
+| training/core/src/cy_exec/training/contracts/artifacts.py | Python 实现或测试模块：artifacts.py。 |
+| training/core/src/cy_exec/training/contracts/attempt.py | Python 实现或测试模块：attempt.py。 |
+| training/core/src/cy_exec/training/contracts/checkpoint.py | Python 实现或测试模块：checkpoint.py。 |
+| training/core/src/cy_exec/training/contracts/distributed.py | Python 实现或测试模块：distributed.py。 |
+| training/core/src/cy_exec/training/contracts/errors.py | Python 实现或测试模块：errors.py。 |
+| training/core/src/cy_exec/training/contracts/events.py | Python 实现或测试模块：events.py。 |
+| training/core/src/cy_exec/training/contracts/launch.py | Python 实现或测试模块：launch.py。 |
+| training/core/src/cy_exec/training/contracts/spec.py | Python 实现或测试模块：spec.py。 |
+| training/core/src/cy_exec/training/contracts/status.py | Python 实现或测试模块：status.py。 |
+| training/core/src/cy_exec/training/contracts/workload.py | Python 实现或测试模块：workload.py。 |
+
+## 推荐阅读顺序
+
+先阅读 training/core/src/cy_exec/training/contracts/__init__.py，再沿包入口或导入关系继续阅读。
+按 runtime 顺序阅读同级模块；职责边界请参见父目录 README。

@@ -23,7 +23,10 @@ from google.protobuf import json_format, message_factory
 
 
 class ContractKernel:
-    """Validate requests using the shipped Platform descriptor, then return fixture replies."""
+    """Validate requests using the shipped Platform descriptor, then return fixture replies.
+
+    使用随包提供的 Platform descriptor 验证请求,然后返回 fixture 回复。
+    """
 
     def __init__(self, path):
         self.encoder = KernelClient(path / "unused.sock")
@@ -73,13 +76,50 @@ def configured(tmp_path, monkeypatch):
     path = tmp_path / "signing-key"
     path.write_bytes(key.private_bytes_raw())
     path.chmod(0o600)
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *a, **kw: subprocess.CompletedProcess(
-            a[0],
-            0,
-            stdout=json.dumps(
+    packages = {
+        name: "unit-fixture"
+        for name in (
+            "grpcio",
+            "packaging",
+            "protobuf",
+            "torch",
+            "torchaudio",
+            "torchvision",
+            "transformers",
+            "peft",
+            "llamafactory",
+        )
+    }
+    python = Path(sys.executable)
+    manifest = tmp_path / "trainer-runtime.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "profile": "CYRENE_YIELD_TRAINER_V1_CUDA128",
+                "status": "READY",
+                "python": str(python),
+                "packages": packages,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest.chmod(0o600)
+
+    def probe_trainer_runtime(args, **kwargs):
+        if "-I" in args:
+            assert args[:3] == [str(python), "-I", "-c"]
+            assert "importlib.metadata.version" in args[3]
+            assert "llamafactory.cli" in args[3]
+            assert kwargs["timeout"] == 45
+            assert kwargs["check"] is False
+            assert json.loads(kwargs["input"]) == {"python": str(python), "packages": packages}
+            stdout = ""
+        else:
+            assert args[0] == str(python)
+            assert args[1] == "-c"
+            assert "import importlib.metadata as m,json" in args[2]
+            stdout = json.dumps(
                 {
                     "llamafactory": "unit-fixture",
                     "torch": "unit-fixture",
@@ -88,16 +128,20 @@ def configured(tmp_path, monkeypatch):
                     "grpcio": "unit-fixture",
                     "protobuf": "unit-fixture",
                 }
-            ),
-        ),
-    )
+            )
+        assert kwargs["capture_output"] is True
+        assert kwargs["text"] is True
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", probe_trainer_runtime)
     kernel = ContractKernel(tmp_path)
     config = KernelTrainingConfiguration(
         socket=tmp_path / "kernel.sock",
         installations=tmp_path / "installations",
         state_directory=tmp_path / "state",
-        python=Path(sys.executable),
+        python=python,
         signing_key_file=path,
+        trainer_runtime_manifest=manifest,
     )
     executor = KernelTrainingExecutor(config, client=kernel)
     root = tmp_path / "output"
@@ -151,6 +195,19 @@ def test_start_failure_retains_receipt_and_requires_cleanup(tmp_path, monkeypatc
         assert kernel.calls[-1][0] == "ReleaseLease"
         receipt = next((tmp_path / "state" / "execution-receipts").glob("*.json"))
         assert json.loads(receipt.read_text())["released"] is True
+    finally:
+        executor.close()
+
+
+def test_unavailable_trainer_runtime_is_rejected_before_kernel_lease(tmp_path, monkeypatch):
+    executor, kernel, _key, launch = configured(tmp_path, monkeypatch)
+    executor.configuration.trainer_runtime_manifest = None
+    try:
+        with pytest.raises(ExecutionControlError, match="YIELD_KERNEL_ADMISSION_FAILED") as caught:
+            executor.start(launch)
+        assert not caught.value.lost and not caught.value.cleanup_attempted
+        assert kernel.calls == []
+        assert list((tmp_path / "state" / "execution-receipts").glob("*.json")) == []
     finally:
         executor.close()
 

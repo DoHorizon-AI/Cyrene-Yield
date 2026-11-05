@@ -3,11 +3,18 @@
 Yield owns Product run and attempt projections. It never starts a local
 process tree when the Platform execution adapter is absent; missing execution
 authority is a stable, fail-closed Product outcome.
+
+在显式配置 Platform executor 的基础上实现 Product 训练 runtime。
+
+Yield 拥有 Product run 与 attempt 映射。如果缺少 Platform 执行适配器,它绝不启动本地进程树;缺少执行权威时会返回稳定且 fail-closed 的 Product 结果。
 """
 # ┌─────────────────────────────────────────────────────────────────────┐
 # │ 📄 training/core/src/cy_exec/training/runtime.py
+# │ 中文:文件:training/core/src/cy_exec/training/runtime.py
 # │ Module: training/core/src/cy_exec/training/runtime
+# │ 模块:training/core/src/cy_exec/training/runtime
 # │ Role: Product training coordination over explicit Platform execution.
+# │ 职责:基于显式 Platform 执行的 Product 训练协调。
 # │
 # │ 模块职责：Yield 标准训练运行时——负责训练契约、尝试、执行器、引擎、检查点与前置校验。
 # └─────────────────────────────────────────────────────────────────────┘
@@ -55,7 +62,10 @@ from .product_results import publish_adapter
 
 @dataclass
 class TrainingSession:
-    """Product-facing handle around a TrainingRun and its attempts."""
+    """Product-facing handle around a TrainingRun and its attempts.
+
+    围绕 TrainingRun 及其 attempts 的 Product 侧句柄。
+    """
 
     session_id: str
     spec: TrainingSpec
@@ -64,6 +74,8 @@ class TrainingSession:
     handle: ProcessHandle | None = None
     result: TrainingResult | None = None
     events: list[TrainingEvent] = field(default_factory=list)
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    diagnostics_degraded: bool = False
     error: str = ""
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -76,15 +88,21 @@ class TrainingSession:
 
 # ════════════════════════════════════════════════════════════════════════
 # 🔧 CLASS: TrainingRuntime
+# 🔧 类:TrainingRuntime
 #
 #   Coordinates product training attempts, engine adapters, executors, event
+#   协调 Product 训练 attempt、引擎适配器、executor、事件
 #   handling, retry decisions, and checkpoint collection.
+#   处理、重试决策与 checkpoint 收集。
 #
 #   协调产品训练尝试、引擎适配器、执行器、事件处理、重试决策与检查点收集。
 #
 # ════════════════════════════════════════════════════════════════════════
 class TrainingRuntime:
-    """Owns in-process execution sessions for every engine and executor."""
+    """Owns in-process execution sessions for every engine and executor.
+
+    为所有引擎与 executor 管理进程内执行 session。
+    """
 
     def __init__(
         self,
@@ -193,6 +211,16 @@ class TrainingRuntime:
                 if attempt is not None:
                     if attempt.events is not session.events:
                         attempt.events.append(event)
+        # Diagnostics ride alongside events: the raw stream is a separate copy
+        # 诊断记录与事件并行传递:原始流是独立副本,
+        # and never replaces the business event stream.
+        # 绝不替代业务事件流。
+        reader = getattr(executor, "read_new_diagnostics", None)
+        if reader is not None:
+            session.diagnostics.extend(reader(session.handle))
+        degraded = getattr(executor, "diagnostics_degraded", None)
+        if degraded is not None and degraded(session.handle):
+            session.diagnostics_degraded = True
         if session.handle.extra.get("lost"):
             self._mark_attempt_lost(session, "worker/operation lost")
             return session
@@ -221,6 +249,7 @@ class TrainingRuntime:
                 )
         except (ArtifactError, OSError, ValueError) as exc:
             # A zero exit without publishable weights is a failed Product result.
+            # 进程退出码为零但没有可发布权重时,Product 结果仍为失败。
             session.status = TrainingStatus.FAILED
             session.result.status = TrainingStatus.FAILED
             session.error = str(exc).split(":", 1)[0]
@@ -236,7 +265,10 @@ class TrainingRuntime:
         return session
 
     def restore_session(self, launch: TrainingLaunchSpec, handle: ProcessHandle) -> TrainingSession:
-        """Restore a Kernel execution receipt without submitting or retrying work."""
+        """Restore a Kernel execution receipt without submitting or retrying work.
+
+        恢复 Kernel 执行回执,不提交或重试工作。
+        """
         spec = TrainingSpec.from_dict(launch.extra["product_spec"])
         session_id = str(spec.job_id)
         with self._lock:
@@ -271,21 +303,33 @@ class TrainingRuntime:
 
     @property
     def hardware_facts(self) -> HardwareFacts | None:
-        """Canonical Node inventory projection supplied by the runtime host."""
+        """Canonical Node inventory projection supplied by the runtime host.
+
+        由 runtime host 提供的规范 Node 清单映射。
+        """
 
         return self._hardware_facts
 
     def update_hardware_facts(self, facts: HardwareFacts) -> None:
-        """Refresh canonical host observations before a new Product preflight."""
+        """Refresh canonical host observations before a new Product preflight.
+
+        在新的 Product preflight 前刷新规范主机观测。
+        """
         self._hardware_facts = facts
 
     def artifact_provider_for(self, spec: TrainingSpec) -> ArtifactProvider:
-        """Publish product reports through the same Artifact Plane provider."""
+        """Publish product reports through the same Artifact Plane provider.
+
+        通过相同 Artifact Plane provider 发布 Product 报告。
+        """
 
         return self._provider_for(spec)
 
     def resolve_environment_lock(self, spec: TrainingSpec):
-        """Resolve once for Product orchestration without moving resolution into an engine."""
+        """Resolve once for Product orchestration without moving resolution into an engine.
+
+        仅解析一次,供 Product 编排使用,不将解析职责移入引擎。
+        """
 
         return self._resolve_environment_lock(spec)
 
@@ -460,6 +504,11 @@ class TrainingRuntime:
             The explicit execution port supplied by the Product composition root.
         Raises:
             ExecutionControlError: If no Platform execution binding is configured.
+
+        返回已配置的 Platform 适配器,否则 fail closed。
+
+        返回:Product composition root 提供的显式执行端口。
+        抛出:未配置 Platform 执行绑定时抛出 ExecutionControlError。
         """
 
         if self._executor is None:
@@ -519,7 +568,10 @@ def _empty_launch(spec: TrainingSpec) -> TrainingLaunchSpec:
 def _environment_hardware_facts(
     facts: HardwareFacts | None,
 ) -> HardwareRuntimeFacts | None:
-    """Map the canonical Node inventory to Environment's smaller generic view."""
+    """Map the canonical Node inventory to Environment's smaller generic view.
+
+    将规范 Node 清单映射为 Environment 使用的较小通用视图。
+    """
 
     if facts is None:
         return None

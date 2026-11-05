@@ -47,3 +47,40 @@ This pass intentionally changes comments and Markdown only. The relevant evidenc
 Do not add raw dataset ownership, model serving, evaluation, generic process supervision, or canonical hardware probing. Those responsibilities belong to Catalyst, Reactor, Echo, Platform Kernel, and Platform Node Agent.
 
 不要在 Yield 中加入原始数据集归属、模型服务、评估、通用进程监管或标准硬件探测；这些职责分别归属于 Catalyst、Reactor、Echo、Platform Kernel 与 Platform Node Agent。
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# 常见问题与排障
+
+## 哪个组件拥有训练作业状态？
+
+Yield 的 Product runtime 协调 TrainingRun 和 TrainingAttempt，持久控制平面状态遵循 Platform 契约。引擎适配器或 WebUI 不得静默成为第二个状态权威。
+
+## 安全的执行路径是什么？
+
+遵循 TrainingSpec → preflight → tiny dry run → workload staging → TrainingRuntime → engine adapter → checkpoint verification。直接调用引擎可用于开发，但不属于 Product 生命周期路径。
+
+## 为什么配置能通过解析，却在 preflight 失败？
+
+解析会检查结构和类型。Preflight 还会检查模型元数据、数据集兼容性、硬件事实、环境、显存估算和策略门禁。
+
+## 谁拥有数据集？
+
+Catalyst 拥有数据接入和原始清理。Yield 消费 DatasetRef，并负责引擎契约所需的训练专用采样或预处理。
+
+## 为什么 Yield 没有本地执行回退？
+
+Platform 负责进程树、资源租约、取消和清理证据。若缺少执行绑定，Yield 会返回 YIELD_EXECUTION_NOT_CONFIGURED，而不会建立第二个本地权威。
+
+## LLaMA Factory 改动应该放在哪里？
+
+集成后端专属的改动属于 Cyrene-Plugins-Official/plugins/training/llama-factory。Product 生命周期行为属于 training/core；不要在后端复制 TrainingRuntime 状态。
+
+## 为什么注释专属工作不运行完整测试套件？
+
+本轮有意只修改注释和 Markdown。相关证据是范围审计、空白检查，以及确认没有非注释源码行或配置文件变更；行为变更仍需后续功能测试。
+
+## Yield 不应加入什么？
+
+不要加入原始数据集所有权、模型服务、评估、通用进程监管或规范硬件探测。这些职责分别属于 Catalyst、Reactor、Echo、Platform Kernel 和 Platform Node Agent。

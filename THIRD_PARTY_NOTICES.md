@@ -33,7 +33,7 @@ clean-root Product 源码的依赖。由于其再分发与溯源未获批准，�
 | `cryptography` | `50.0.1` | PyPI | `Apache-2.0 OR BSD-3-Clause` | Signing and cryptographic primitives |
 | `cyrene-artifacts` | `0.1.0` | Platform Git SHA `c59be6f2bd82489fbe933dadff84fc589e00afd9` | `Apache-2.0` declared by owner manifest | Artifact contract/provider |
 | `cyrene-preflight` | `0.1.0` | Platform Git SHA `c59be6f2bd82489fbe933dadff84fc589e00afd9` | `Apache-2.0` declared by owner manifest | Resource-fact/preflight contract |
-| `cyrene-plugin-runtime` | `0.2.0` | Plugins Git SHA `3afbac4d386eb7a27f6778149187884820c0b7f6` | `UNKNOWN`: owner package has no license field or nearest license file | Direct capability runtime |
+| `cyrene-plugin-runtime` | `0.2.2` | Plugins Git SHA `bf10bb5759fe5477438249e56ac5d864734f89cc` | `UNKNOWN`: owner package has no license field or nearest license file | Direct capability runtime |
 
 ## Development and contract dependencies / 开发与契约依赖
 
@@ -49,7 +49,7 @@ clean-root Product 源码的依赖。由于其再分发与溯源未获批准，�
 | `types-PyYAML`, `types-grpcio`, `types-protobuf` | locked in `uv.lock` | Verify each wheel notice in release SBOM | Type-only development inputs |
 | `cyrene-hf-model-analyzer` | `0.3.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional model-analysis capability |
 | `cyrene-compat-rules` | `0.2.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional compatibility capability |
-| `cyrene-dataset-validator` | `0.2.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional dataset-validation capability |
+| `cyrene-dataset-validator` | `0.3.0` | `UNKNOWN`: owner package has no license field or nearest license file | Optional dataset-validation capability |
 
 The public contract package `cyrene-yield-contracts` is Apache-2.0 under its
 package manifest and is covered by the repository [`LICENSE`](LICENSE).
@@ -80,8 +80,9 @@ CUDA/NVIDIA 组件的上游许可证与声明必须由 release SBOM 收录。本
 Yield does not vendor the LLaMA Factory source. The optional
 `training.llama-factory.v1` implementation is owned by Plugins at the pinned
 revision above. That Plugin currently declares Apache-2.0 for its extracted
-package and records upstream provenance, but the repository is private and
-the other pinned Plugin package manifests are not licensed. Preserve the
+package and records upstream provenance. The repository and pinned revision
+are publicly reachable, but the other pinned Plugin package manifests are not
+licensed. Preserve the
 upstream license, citation, and notices in the Plugin distribution; do not
 infer permissions from Yield's Apache-2.0 license.
 
@@ -92,15 +93,15 @@ Yield 不 vendoring LLaMA Factory 源码。可选的 `training.llama-factory.v1`
 
 ## Publication blockers / 公开阻塞项
 
-The Plugins revision is not anonymously reachable, and the unresolved
-`UNKNOWN` package licenses above prevent a complete public dependency closure.
-Before publication, the owner must publish or replace those immutable
+The Plugins revision is anonymously reachable, but the unresolved `UNKNOWN`
+package licenses above prevent a complete binary-distribution dependency
+closure. Before publication, the owner must license or replace those immutable
 packages, review the trainer/CUDA and upstream notices, refresh both lockfiles,
 and attach an SPDX or CycloneDX SBOM whose digest matches the release tag.
 See [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for the procedure.
 
-Plugins 修订版当前不能匿名访问，上述 `UNKNOWN` 包许可证也使公开依赖闭包不完整。
-公开前，owner 必须公开或替换这些不可变包，审查 trainer/CUDA 与上游声明，刷新两份
+Plugins 修订版现已可匿名访问，但上述 `UNKNOWN` 包许可证仍使二进制分发依赖闭包不完整。
+公开前，owner 必须许可或替换这些不可变包，审查 trainer/CUDA 与上游声明，刷新两份
 lockfile，并附上摘要与 release tag 匹配的 SPDX 或 CycloneDX SBOM。流程见
 [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md)。
 

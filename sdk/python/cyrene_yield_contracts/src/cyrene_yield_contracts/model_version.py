@@ -2,6 +2,10 @@
 
 Artifact bytes and ArtifactRef identity remain in the Platform Artifact Plane.
 Yield owns model composition, lineage, and content-derived ModelVersion identity.
+
+Yield 所有的不可变 ModelVersion 契约。
+
+制品字节与 ArtifactRef 身份仍由 Platform Artifact Plane 管理。Yield 拥有模型组合、lineage 与基于内容派生的 ModelVersion 身份。
 """
 
 from __future__ import annotations
@@ -82,6 +86,10 @@ def _reject_floats(value: Any, *, path: str = "$") -> None:
     ModelVersion V1 intentionally carries only strings, booleans, integers,
     arrays, objects, and null.  This keeps the Python canonical serializer
     byte-compatible with the JCS value subset used by the platform manifests.
+
+    拒绝会导致 JCS 数值发生漂移、因而无法无损表示的值。
+
+    ModelVersion V1 有意只包含字符串、布尔值、整数、数组、对象和 null。这样可使 Python 规范序列化器与平台 manifest 使用的 JCS 值子集保持字节兼容。
     """
 
     if isinstance(value, float):
@@ -333,6 +341,10 @@ class ModelVersion:
     only as opaque lineage references.  LoRA rank, alpha, and target modules
     remain in the adapter payload and are intentionally absent from this
     descriptor.
+
+    供 Product 契约使用的不可变规范模型组合。
+
+    此 helper 仅拥有内容寻址描述符。TrainingRun 由 Yield 拥有,DatasetVersion 由 Catalyst 拥有;两者在此仅作为不透明的 lineage 引用。LoRA rank、alpha 和 target modules 保留在 adapter payload 中,并有意不纳入此描述符。
     """
 
     _payload: Mapping[str, Any] = field(repr=False, compare=False)
@@ -343,7 +355,10 @@ class ModelVersion:
 
     @classmethod
     def _from_normalized(cls, payload: Mapping[str, Any]) -> "ModelVersion":
-        """Build an instance after create/from_dict have completed validation."""
+        """Build an instance after create/from_dict have completed validation.
+
+        在 create/from_dict 完成校验后构造实例。
+        """
 
         model_id = payload["id"]
         instance = object.__new__(cls)
@@ -381,7 +396,10 @@ class ModelVersion:
         return self._payload["composition"]
 
     def identity_payload(self) -> dict[str, Any]:
-        """Return the canonical hash preimage without the computed id."""
+        """Return the canonical hash preimage without the computed id.
+
+        返回不含计算所得 id 的规范哈希前像。
+        """
 
         return {key: _thaw_json(value) for key, value in self._payload.items() if key != "id"}
 
@@ -389,6 +407,9 @@ class ModelVersion:
         return canonical_json_bytes(self.identity_payload())
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a detached JSON-compatible copy of the immutable value."""
+        """Return a detached JSON-compatible copy of the immutable value.
+
+        返回不可变值的独立 JSON 兼容副本。
+        """
 
         return _thaw_json(self._payload)

@@ -18,3 +18,27 @@
 | LoRA / QLoRA | LoRA / QLoRA | Parameter-efficient fine-tuning methods / 参数高效微调方法 |
 | Kernel authority | 内核权威 | Platform-owned execution and resource boundary / Platform 负责的执行与资源边界 |
 | Contract candidate | 契约候选 | Documented seam awaiting final implementation or integration / 已记录但等待最终实现或集成的接缝 |
+---
+
+<!-- Chinese Translation / 中文翻译 -->
+
+# 术语表
+
+| English | 中文 | 含义 |
+|---|---|---|
+| Yield | Yield 训练服务 | Cyrene 的训练与微调产品 |
+| TrainingSpec | 训练规格 | 与引擎无关的模型、数据集、输出和策略声明 |
+| TrainingRun | 训练运行 | Product 级作业身份与生命周期 |
+| TrainingAttempt | 训练尝试 | 某次运行下的一次执行尝试 |
+| TrainingRuntime | 训练运行时 | 协调 attempts、事件、执行与制品的组件 |
+| Tiny dry run | 小型试运行 | 完整训练前的最小执行门禁 |
+| Preflight | 前置校验 | 静态兼容性与安全检查 |
+| Engine adapter | 引擎适配器 | 将 Product 意图转换为引擎执行的边界 |
+| Executor | 执行器 | 启停受控工作负载进程树的组件 |
+| Checkpoint | 检查点 | 训练期间或结束后生成的已保存模型状态 |
+| CheckpointRef | 检查点引用 | 指向已验证 checkpoint 制品并由摘要校验的引用 |
+| Artifact Plane | 制品平面 | Platform 管理不可变训练输出的边界 |
+| LLaMA Factory | LLaMA Factory | Yield 使用的 Plugins 所有训练后端 |
+| LoRA / QLoRA | LoRA / QLoRA | 参数高效微调方法 |
+| Kernel authority | Kernel 权威 | Platform 所有的执行与资源边界 |
+| Contract candidate | 契约候选 | 已记录但等待最终实现或集成的接缝 |

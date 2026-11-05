@@ -11,10 +11,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+from uuid import uuid4
 
+import httpx
 import uvicorn
 
 from .executors.kernel_training import KernelTrainingConfiguration
@@ -25,10 +29,29 @@ TRAINER_PROFILE = "CYRENE_YIELD_TRAINER_V1_CUDA128"
 
 
 def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
-    """Read one private READY manifest and enforce its profile boundary."""
+    """Read one private READY manifest and enforce its profile boundary.
 
-    if path.stat().st_mode & 0o077:
-        raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected mode 0600")
+    读取一个私有 READY manifest,并强制执行其 profile 边界。
+    """
+
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError("RUNTIME_CONFIG_INVALID: expected a regular manifest file")
+    mode = stat.S_IMODE(metadata.st_mode)
+    if profile == PLATFORM_RUNTIME_PROFILE:
+        local_permissions = mode == 0o600 and metadata.st_uid == os.getuid()
+        production_permissions = False
+        if mode == 0o640 and metadata.st_uid == 0:
+            try:
+                import grp
+
+                production_permissions = metadata.st_gid == grp.getgrnam("cyrene").gr_gid
+            except (ImportError, KeyError):
+                production_permissions = False
+        if not (production_permissions or local_permissions):
+            raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected root:cyrene 0640 or owner-only 0600")
+    elif mode != 0o600 or metadata.st_uid != os.getuid():
+        raise ValueError("RUNTIME_CONFIG_PERMISSIONS: expected service-owned mode 0600")
     document = json.loads(path.read_text(encoding="utf-8"))
     if (
         not isinstance(document, dict)
@@ -43,7 +66,10 @@ def _private_manifest(path: Path, profile: str) -> dict[str, Any]:
 def _runtime_from_manifests(
     *, state_directory: Path, runtime_config: Path, trainer_runtime_config: Path
 ) -> tuple[Path, KernelTrainingConfiguration]:
-    """Resolve all Kernel topology and trainer paths from canonical manifests."""
+    """Resolve all Kernel topology and trainer paths from canonical manifests.
+
+    从规范 manifest 中解析全部 Kernel 拓扑与 trainer 路径。
+    """
 
     runtime = _private_manifest(runtime_config, PLATFORM_RUNTIME_PROFILE)
     trainer = _private_manifest(trainer_runtime_config, TRAINER_PROFILE)
@@ -71,8 +97,6 @@ def _runtime_from_manifests(
         or signing_key.stat().st_mode & 0o077
         or signing_key.stat().st_size != 32
         or not python.is_absolute()
-        or not python.is_file()
-        or not os.access(python, os.X_OK)
     ):
         raise ValueError("RUNTIME_CONFIG_UNAVAILABLE: bootstrap runtime components again")
     host = runtime.get("host")
@@ -87,13 +111,138 @@ def _runtime_from_manifests(
         installations=installations,
         signing_key_file=signing_key,
         python=python,
+        trainer_runtime_manifest=trainer_runtime_config,
         state_directory=state_directory,
         allow_wsl_shared_device=allow_wsl,
     )
 
 
+def _run_command(arguments: list[str]) -> int:
+    """Answer one read-only or cancellation question about a TrainingRun.
+
+    针对 TrainingRun 回答一个只读或取消请求。
+    """
+
+    parser = argparse.ArgumentParser(prog="cyrene-yield run", description="Inspect TrainingRuns")
+    parser.add_argument("--url", default="http://127.0.0.1:8092")
+    parser.add_argument("--token-env", help="Name of the Product credential variable")
+    commands = parser.add_subparsers(dest="run_command", required=True)
+    for name in ("status", "logs", "cancel"):
+        command = commands.add_parser(name)
+        command.add_argument("run_id")
+    args = parser.parse_args(arguments)
+    headers = {"Accept": "application/json"}
+    token = os.environ.get(args.token_env) if args.token_env else None
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    base = args.url.rstrip("/")
+    try:
+        with httpx.Client(base_url=base, headers=headers, timeout=60.0) as client:
+            if args.run_command == "cancel":
+                response = client.post(f"/api/v1/training-runs/{args.run_id}/actions/cancel")
+            elif args.run_command == "logs":
+                response = client.get(f"/api/v1/training-runs/{args.run_id}/attempts")
+            else:
+                response = client.get(f"/api/v1/training-runs/{args.run_id}")
+            if response.status_code >= 300:
+                print(f"Yield: HTTP {response.status_code}", file=sys.stderr)
+                return 1
+            print(json.dumps(response.json(), indent=2))
+    except httpx.HTTPError as exc:
+        print(f"Yield: connection failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _package_binding_command(arguments: list[str]) -> int:
+    """Forward one local owner action; this CLI never loads Package Runtime credentials.
+
+    转发一个本机 owner 操作；此 CLI 不读取 Package Runtime source 凭据。
+    """
+
+    parser = argparse.ArgumentParser(prog="cyrene-yield package-binding")
+    commands = parser.add_subparsers(dest="binding_command", required=True)
+    status = commands.add_parser("status")
+    status.add_argument("binding_id")
+    activate = commands.add_parser("activate")
+    activate.add_argument("binding_id")
+    activate.add_argument("installation_id")
+    activate.add_argument("--request-id")
+    reconcile = commands.add_parser("reconcile")
+    reconcile.add_argument("binding_id")
+    reconcile.add_argument("--request-id", required=True)
+    for command in (status, activate, reconcile):
+        command.add_argument("--token-env", help="Name of the local owner token variable")
+        command.add_argument("--token-file", type=Path, help="Owner-only file containing the local owner token")
+    args = parser.parse_args(arguments)
+    if args.token_env and args.token_file:
+        parser.error("Choose only one of --token-env or --token-file")
+
+    token: str | None = None
+    if args.token_env:
+        token = os.environ.get(args.token_env)
+    elif args.token_file:
+        try:
+            metadata = args.token_file.lstat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+            ):
+                parser.error("Owner token file must be a caller-owned regular file with mode 0600")
+            token = args.token_file.read_text(encoding="utf-8")
+            if token.endswith("\n"):
+                token = token[:-1]
+        except (OSError, UnicodeDecodeError):
+            parser.error("Owner token file could not be read")
+    if not token or token != token.strip() or any(character.isspace() for character in token):
+        parser.error("Provide a non-empty owner token with --token-env or --token-file")
+
+    headers = {"Accept": "application/json", "Authorization": "Bearer " + token}
+    binding_path = quote(args.binding_id, safe="")
+    endpoint = f"/api/v1/runtime-bindings/{binding_path}"
+    request_id: str | None = None
+    if args.binding_command == "activate":
+        request_id = args.request_id or str(uuid4())
+        print(f"requestId: {request_id}")
+        headers["Idempotency-Key"] = request_id
+    elif args.binding_command == "reconcile":
+        request_id = args.request_id
+        headers["Idempotency-Key"] = request_id
+
+    try:
+        with httpx.Client(base_url="http://127.0.0.1:8001", headers=headers, timeout=15.0) as client:
+            if args.binding_command == "status":
+                response = client.get(endpoint + "/status")
+            elif args.binding_command == "reconcile":
+                response = client.post(endpoint + "/actions/reconcile")
+            else:
+                response = client.post(
+                    endpoint + "/actions/activate",
+                    json={"installationId": args.installation_id},
+                )
+    except httpx.HTTPError as exc:
+        print(f"Yield package binding: connection failed ({type(exc).__name__})", file=sys.stderr)
+        return 1
+    try:
+        result = response.json()
+    except ValueError:
+        print(f"Yield package binding: HTTP {response.status_code}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if response.status_code < 300 else 1
+
+
 def main() -> None:
-    """Expose documented public APIs; operator paths never enter resource identities."""
+    """Expose documented public APIs; operator paths never enter resource identities.
+
+    暴露文档中列出的公开 API;运营路径不会进入资源身份。
+    """
+    arguments = sys.argv[1:]
+    if arguments and arguments[0] == "run":
+        raise SystemExit(_run_command(arguments[1:]))
+    if arguments and arguments[0] == "package-binding":
+        raise SystemExit(_package_binding_command(arguments[1:]))
     parser = argparse.ArgumentParser(description="Cyrene Yield Text Model Lifecycle V1")
     parser.add_argument("--state-directory", required=True, type=Path)
     parser.add_argument("--runtime-config", type=Path)
@@ -106,12 +255,23 @@ def main() -> None:
     parser.add_argument("--allow-wsl-shared-device", action="store_true")
     parser.add_argument("--reactor-url")
     parser.add_argument("--reactor-token-env", help="Name of the Reactor Product credential variable")
+    parser.add_argument("--exchange-url")
+    parser.add_argument("--exchange-token-env", help="Name of the Exchange Product credential variable")
+    parser.add_argument("--exchange-endpoint-id")
+    parser.add_argument("--exchange-target-binding-id")
+    parser.add_argument(
+        "--model-registry-connection-ref",
+        help="Platform-resolved connection_ref for model.registry.v1",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8092)
     args = parser.parse_args()
     token = os.environ.get(args.reactor_token_env) if args.reactor_token_env else None
     if args.reactor_token_env and not token:
         parser.error("The configured Reactor credential variable is empty")
+    exchange_token = os.environ.get(args.exchange_token_env) if args.exchange_token_env else None
+    if args.exchange_token_env and not exchange_token:
+        parser.error("The configured Exchange credential variable is empty")
     kernel: KernelTrainingConfiguration | None = None
     if args.runtime_config or args.trainer_runtime_config:
         if not args.runtime_config or not args.trainer_runtime_config:
@@ -157,8 +317,14 @@ def main() -> None:
         state_directory=args.state_directory,
         artifact_root=artifact_root,
         kernel=kernel,
+        workspace_credential_map_json=os.environ.get("YIELD_WORKSPACE_CREDENTIAL_MAP"),
         reactor_url=args.reactor_url,
         reactor_bearer_token=token,
+        exchange_url=args.exchange_url,
+        exchange_bearer_token=exchange_token,
+        exchange_endpoint_id=args.exchange_endpoint_id,
+        exchange_target_binding_id=args.exchange_target_binding_id,
+        model_registry_connection_ref=args.model_registry_connection_ref,
     )
     uvicorn.run(app, host=args.host, port=args.port)
 

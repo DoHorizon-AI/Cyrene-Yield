@@ -1,12 +1,18 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ 📄 File: training/core/src/cy_exec/training/plugin_preflight.py     ║
+# ║ 文件:training/core/src/cy_exec/training/plugin_preflight.py     ║
 # ║ Module: Cyrene Yield                                                ║
+# ║ 模块:Cyrene Yield                                                ║
 # ║ Role: Direct adapters for Plugins-owned preflight capabilities.     ║
+# ║ 职责:面向 Plugins 所有 preflight 能力的直连适配器。
 # ║                                                                    ║
 # ║ 模块：Cyrene Yield                                                  ║
 # ║ 职责：连接由 Plugins 实现的前置分析能力，不承载能力实现。                 ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-"""Typed Product adapters for Plugins-owned preflight capabilities."""
+"""Typed Product adapters for Plugins-owned preflight capabilities.
+
+针对 Plugins 所有的 preflight 能力的有类型 Product 适配器。
+"""
 
 from __future__ import annotations
 
@@ -29,7 +35,10 @@ PREFLIGHT_INTERFACE_VERSION = "1"
 
 
 class PreflightCapabilityFailure(RuntimeError):
-    """A required Plugins-owned preflight capability could not be used."""
+    """A required Plugins-owned preflight capability could not be used.
+
+    无法使用所需的 Plugins 所有 preflight 能力。
+    """
 
     def __init__(self, capability: str, message: str) -> None:
         super().__init__(message)
@@ -37,7 +46,10 @@ class PreflightCapabilityFailure(RuntimeError):
 
 
 class DirectPluginModelAnalyzer:
-    """Map Yield model intent to ``model.analyzer.v1`` typed JSON."""
+    """Map Yield model intent to ``model.analyzer.v1`` typed JSON.
+
+    将 Yield 模型意图映射为 model.analyzer.v1 的有类型 JSON。
+    """
 
     def __init__(
         self,
@@ -94,7 +106,10 @@ class DirectPluginModelAnalyzer:
 
 
 class DirectPluginCompatibilityEvaluator:
-    """Map Product preflight facts to ``compatibility.evaluator.v1``."""
+    """Map Product preflight facts to ``compatibility.evaluator.v1``.
+
+    将 Product preflight 事实映射为 compatibility.evaluator.v1。
+    """
 
     def __init__(
         self,
