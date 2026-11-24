@@ -5,7 +5,7 @@
 | Owner / 所有者 | Revision / 修订版 |
 | --- | --- |
 | External trainer / 外部训练器 | `Icy-Lunar/LlamaFactory@1cf21a11e7375cf64e56a7092f9ff3132efc0ad6` |
-| Capability adapter / 能力适配器 | `Cyrene-Plugins-Official@c9bed4b4cd44f4040c01a1a9fbd7f4198c388e33`, `cyrene.training.llama-factory` version `0.2.3` |
+| Capability adapter / 能力适配器 | `Cyrene-Plugins-Official@6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3`, `cyrene.training.llama-factory` version `0.2.3` |
 | Product / 产品 | This dependent PR targets `Cyrene-Yield/develop`; no trainer implementation is copied here. / 本依赖 PR 面向 develop，不复制训练器实现。 |
 
 Dependencies under review: [trainer PR #1](https://github.com/Icy-Lunar/LlamaFactory/pull/1)
