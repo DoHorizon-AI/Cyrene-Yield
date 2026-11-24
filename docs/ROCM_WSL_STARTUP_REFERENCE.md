@@ -4,12 +4,12 @@
 
 | Owner / 所有者 | Revision / 修订版 |
 | --- | --- |
-| External trainer / 外部训练器 | `Icy-Lunar/LlamaFactory@8c392ce83c6410a1679099e1799e02d7d150c3b7` |
-| Capability adapter / 能力适配器 | `Cyrene-Plugins-Official@bf10bb5759fe5477438249e56ac5d864734f89cc`, `cyrene.training.llama-factory` version `0.2.2` |
+| External trainer / 外部训练器 | `Icy-Lunar/LlamaFactory@1cf21a11e7375cf64e56a7092f9ff3132efc0ad6` |
+| Capability adapter / 能力适配器 | `Cyrene-Plugins-Official@6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3`, `cyrene.training.llama-factory` version `0.2.3` |
 | Product / 产品 | This dependent PR targets `Cyrene-Yield/develop`; no trainer implementation is copied here. / 本依赖 PR 面向 develop，不复制训练器实现。 |
 
 Dependencies under review: [trainer PR #1](https://github.com/Icy-Lunar/LlamaFactory/pull/1)
-and [Plugins PR #164](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/pull/164).
+and [Plugins PR #165](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/pull/165).
 The pinned commits are public immutable Git identities, but review/merge and hosted
 acceptance are not implied by reachability. Keep this Product PR draft until the
 upstream gates are satisfied; reconcile the final integrated Plugins revision before merge.
@@ -31,8 +31,8 @@ upstream gates are satisfied; reconcile the final integrated Plugins revision be
 
 ## Deployment and evidence / 部署与证据
 
-The [trainer preview ZIP](https://github.com/Icy-Lunar/LlamaFactory/releases/tag/preview-rocm-wsl-startup-20261105-8c392ce8)
-has SHA-256 `003160fd5397a16c63c715e62c85ceae0662ae9a10cac6c23a27399dd9b38983`.
+The [trainer preview ZIP](https://github.com/Icy-Lunar/LlamaFactory/releases/tag/preview-memory-calibration-20261123-1cf21a11)
+has SHA-256 `48994ea5e4af5fdbade459c16a644513b6d4ebfabff012daaa717e035035210b`.
 This reference update does not install that external trainer automatically. The
 operator deploys it separately; Platform still owns devices/process lifetime and
 Yield still owns training intent/run state. `trainer-runtime/uv.lock` is unchanged.
@@ -41,17 +41,15 @@ Yield still owns training intent/run state. `trainer-runtime/uv.lock` is unchang
 Platform 保持设备与进程生命周期所有权，Yield 保持训练意图和运行状态所有权，独立 CUDA
 环境的 `trainer-runtime/uv.lock` 不变。
 
-Trainer focused local tests: **245 passed, 1 skipped**. Both YAML/JSON tiny CPU runs loaded
-weights, trained LoRA, evaluated and saved a checkpoint. Plugin behavior/TCK/package
-producer tests: **19 passed**. Real ROCm/WSL, CUDA and XPU acceptance for this trainer
-revision: **NOT_RUN**. Hosted CI, review and merge are separate gates. The source
-follow-up fixes the stale `EngineName`/`infer_backend` check, license headers and
-pytest import path, and prepares local fixtures for legacy integration tests without
-weakening the production local-only loader. The complete matrix is rerunning;
-do not treat the preview as merge-ready or hardware-certified.
+Trainer focused local tests: **158 passed, 2 deselected**. The two Windows XPU
+bitsandbytes/PyTorch Inductor import failures are not counted as passing. Plugin
+behavior and TCK tests: **14 passed**. Real ROCm/WSL, CUDA and XPU acceptance for
+this trainer revision: **NOT_RUN**. Hosted CI, review and merge are separate gates.
+The preview adds closed-loop VRAM calibration, expanded static memory modeling,
+Python reuse, and multi-backend deployment hardening; it is not hardware-certified.
 
-训练器本地专项 245 通过、1 跳过，YAML/JSON 小模型 CPU 均完成权重加载、LoRA、训练、验证与保存。
-Plugin 行为/TCK/发布生成器测试 19 通过。此训练器版本的 ROCm/WSL、CUDA、XPU 实机验收为
-**NOT_RUN**；Hosted CI、评审与合并分别确认。源码已修复失效的 `EngineName`/`infer_backend`
-检查、许可证头与 pytest 导入路径，并让遗留集成测试先准备本地文件，不放宽正式加载限制。
-完整矩阵重新运行中，不把预览视为可合并或已经通过硬件认证。
+训练器本地聚焦测试 158 项通过、2 项未计入；两项 Windows XPU 的
+bitsandbytes/PyTorch Inductor 导入失败不标记为通过。Plugin 行为与 TCK 测试 14 项通过。
+此训练器版本的 ROCm/WSL、CUDA、XPU 实机验收为 **NOT_RUN**；Hosted CI、评审与合并
+分别确认。预览加入闭环显存校准、扩展静态估算、Python 复用和多后端部署加固，
+不代表已通过硬件认证。

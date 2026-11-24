@@ -39,7 +39,7 @@ GitHub 仓库及锁定的 Plugins 修订版均已可公开访问，匿名 clone 
 - **License**: [`LICENSE`](LICENSE)
 - **Security Policy**: [`SECURITY.md`](SECURITY.md)
 - **Contribution Guide**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- **LLaMA Factory Plugin Improvements**: [`plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/bf10bb5759fe5477438249e56ac5d864734f89cc/plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md)
+- **LLaMA Factory Plugin Improvements**: [`plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3/plugins/training/llama-factory/CYRENE_IMPROVEMENTS.md)
 - **Service Manifest**: [`service.json`](service.json)
 
 ## Repository layout
@@ -57,7 +57,7 @@ The following table describes the optional LLaMA Factory capability owned by
 Cyrene Plugins. It is context for the Product integration, not a Yield-owned
 implementation or a claim that the complete upstream tree has been migrated.
 The extracted source and upstream notices remain in the Plugin repository;
-review [`UPSTREAM_PROVENANCE.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/bf10bb5759fe5477438249e56ac5d864734f89cc/plugins/training/llama-factory/UPSTREAM_PROVENANCE.md)
+review [`PROVENANCE.md`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/blob/6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3/plugins/training/llama-factory/PROVENANCE.md)
 before redistribution.
 
 下表描述由 Cyrene Plugins 所有的可选 LLaMA Factory capability，仅用于说明 Product
@@ -135,7 +135,7 @@ be inspected separately:
 ```bash
 git clone https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git
 cd Cyrene-Plugins-Official
-git checkout bf10bb5759fe5477438249e56ac5d864734f89cc
+git checkout 6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3
 cd plugins/training/llama-factory
 pip install -e .
 llamafactory-cli webui
@@ -160,8 +160,8 @@ llamafactory-cli export path/to/export.yaml
 ## Upstream and integration references
 
 - Upstream baseline: `hiyouga/LLaMA-Factory`
-- Training-focused customization: [`Icy-Lunar/LlamaFactory@194cc85c5d87612693ac9d47d13c2aecd8a81e22`](https://github.com/Icy-Lunar/LlamaFactory/commit/194cc85c5d87612693ac9d47d13c2aecd8a81e22)
-- Plugin integration path: [`plugins/training/llama-factory/`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/tree/bf10bb5759fe5477438249e56ac5d864734f89cc/plugins/training/llama-factory)
+- Training-focused customization: [`Icy-Lunar/LlamaFactory@1cf21a11e7375cf64e56a7092f9ff3132efc0ad6`](https://github.com/Icy-Lunar/LlamaFactory/commit/1cf21a11e7375cf64e56a7092f9ff3132efc0ad6)
+- Plugin integration path: [`plugins/training/llama-factory/`](https://github.com/DoHorizon-AI/Cyrene-Plugins-Official/tree/6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3/plugins/training/llama-factory)
 
 Model weights, checkpoints, generated configurations, logs, and other runtime artifacts remain in operator-managed storage and must not be committed to this repository.
 ---
@@ -198,7 +198,7 @@ GitHub 仓库和锁定的 Plugins 修订版均可公开访问，因此匿名 clo
 
 ## Plugins 所有的 LLaMA Factory 说明
 
-下表说明由 Cyrene Plugins 拥有的可选 LLaMA Factory 能力，供 Product 集成参考。它不是 Yield 自有实现，也不表示已完成对整个上游代码树的迁移。提取出的源码与上游声明保留在 Plugin 仓库；重新分发前请审阅 UPSTREAM_PROVENANCE.md。
+下表说明由 Cyrene Plugins 拥有的可选 LLaMA Factory 能力，供 Product 集成参考。它不是 Yield 自有实现，也不表示已完成对整个上游代码树的迁移。提取出的源码与上游声明保留在 Plugin 仓库；重新分发前请审阅 PROVENANCE.md。
 
 Cyrene Plugins 中的 LLaMA Factory 能力基于 hiyouga/LLaMA-Factory 定制，目标是降低企业用户的训练配置门槛，并将可复用引擎能力与 Yield 的产品生命周期分离。
 
@@ -247,7 +247,7 @@ Plugins 仓库公开可访问时，可单独检查其不可变修订版：
 ```bash
 git clone https://github.com/DoHorizon-AI/Cyrene-Plugins-Official.git
 cd Cyrene-Plugins-Official
-git checkout bf10bb5759fe5477438249e56ac5d864734f89cc
+git checkout 6b4e8d9402b12808dc8310d14c59ea5fa0f71bb3
 cd plugins/training/llama-factory
 pip install -e .
 llamafactory-cli webui
@@ -268,7 +268,7 @@ llamafactory-cli export path/to/export.yaml
 ## 上游与集成参考
 
 - 上游基线：hiyouga/LLaMA-Factory。
-- 面向训练的定制：Icy-Lunar/LlamaFactory@194cc85c5d87612693ac9d47d13c2aecd8a81e22。
+- 面向训练的定制：Icy-Lunar/LlamaFactory@1cf21a11e7375cf64e56a7092f9ff3132efc0ad6。
 - Plugin 集成路径：Cyrene-Plugins-Official 中的 plugins/training/llama-factory/。
 
 模型权重、checkpoint、生成的配置、日志和其他运行时制品仍保存在运营方管理的存储中，不得提交到本仓库。
