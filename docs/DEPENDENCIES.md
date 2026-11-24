@@ -18,7 +18,7 @@ opinion.
 
 The lockfiles are the source of truth for exact resolved versions and hashes.
 The Product lock points to Platform `c59be6f2bd82489fbe933dadff84fc589e00afd9`
-and Plugins `bf10bb5759fe5477438249e56ac5d864734f89cc`. Both repositories and
+and Plugins `c9bed4b4cd44f4040c01a1a9fbd7f4198c388e33`. Both repositories and
 the pinned revisions are publicly reachable, so an anonymous clean clone can
 resolve the Product graph. Several Plugins owner package manifests still do
 not declare a license; binary publication therefore remains subject to license
@@ -26,7 +26,7 @@ review and the release SBOM gate.
 
 锁文件是精确解析版本与摘要的事实来源。Product 锁文件指向 Platform
 `c59be6f2bd82489fbe933dadff84fc589e00afd9` 和 Plugins
-`bf10bb5759fe5477438249e56ac5d864734f89cc`。两个仓库及锁定修订版均可公开访问，
+`c9bed4b4cd44f4040c01a1a9fbd7f4198c388e33`。两个仓库及锁定修订版均可公开访问，
 匿名 clean clone 可以解析 Product 依赖图。多个 Plugins owner 包 manifest 仍未声明
 许可证，因此二进制发布仍须通过许可证审查与 release SBOM 门禁。
 
@@ -118,7 +118,7 @@ the release SHA. The unresolved records are listed in
 - 仓库许可证授权：LICENSE。
 - 直接依赖摘要：THIRD_PARTY_NOTICES.md。
 
-锁文件是精确解析版本与摘要的事实来源。Product 锁文件指向 Platform 的 c59be6f2bd82489fbe933dadff84fc589e00afd9 和 Plugins 的 bf10bb5759fe5477438249e56ac5d864734f89cc。两个仓库及锁定修订版均可公开访问，匿名 clean clone 可以解析 Product 依赖图。多个 Plugins owner package manifest 仍未声明许可证，因此二进制发布仍须通过许可证审查与 release SBOM 门禁。
+锁文件是精确解析版本与摘要的事实来源。Product 锁文件指向 Platform 的 c59be6f2bd82489fbe933dadff84fc589e00afd9 和 Plugins 的 c9bed4b4cd44f4040c01a1a9fbd7f4198c388e33。两个仓库及锁定修订版均可公开访问，匿名 clean clone 可以解析 Product 依赖图。多个 Plugins owner package manifest 仍未声明许可证，因此二进制发布仍须通过许可证审查与 release SBOM 门禁。
 
 ## 直接 package 清单
 
